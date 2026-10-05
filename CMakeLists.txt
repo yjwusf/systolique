@@ -33,6 +33,7 @@ add_library(systolique
   src/tile.cpp
   src/mesh.cpp
   src/transposer.cpp
-  src/tag_queue.cpp)
+  src/tag_queue.cpp
+  src/mesh_with_delays.cpp)
 target_include_directories(systolique PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_compile_options(systolique PRIVATE ${SYSTOLIQUE_WARNINGS})
