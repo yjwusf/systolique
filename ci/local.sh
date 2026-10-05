@@ -55,7 +55,8 @@ if [ "${SKIP_SANITIZE:-0}" != 1 ]; then
     REF="$ROOT/tests/reference/gemmini_rtl"
     for cmd in "classes_test" "trace_test --ref-dir $REF --config tiled" \
                "conservation_test --config dim4" "provenance_test --config dim4" \
-               "example_test"; do
+               "example_test" "micro_ops_test --out $BUILD" \
+               "fe_trace_test --ref-dir $ROOT/tests/reference/gemmini_fe --top CmdTop"; do
       # shellcheck disable=SC2086
       out="$(leaks --atExit -- "$BUILD"/$cmd 2>&1)" || { echo "$out" | tail -30; echo "leaks: $cmd"; exit 1; }
       echo "$out" | grep -E "^Process [0-9]+: [0-9]+ leaks" | sed "s|^|$cmd: |"

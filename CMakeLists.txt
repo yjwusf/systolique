@@ -123,6 +123,17 @@ foreach(top ExecuteTop CmdTop CtrlTop)
     FAIL_REGULAR_EXPRESSION "FAIL")
 endforeach()
 
+# The splitter: directed micro-op cycles derived from the Chisel, 64^3 WS / OS matmuls end to
+# end (results, attribution, conservation, provenance), recording and VCD change nothing, class rules.
+systolique_test_program(micro_ops_test)
+add_test(NAME systolique_micro_ops COMMAND micro_ops_test --out ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties(systolique_micro_ops PROPERTIES LABELS "unit;conservation" PASS_REGULAR_EXPRESSION "MICRO_OPS ok")
+
+# The micro-op example of perf_reports/ (64^3 WS and OS through the Engine).
+systolique_test_program(engine_example_test)
+add_test(NAME systolique_engine_example COMMAND engine_example_test)
+set_tests_properties(systolique_engine_example PROPERTIES LABELS unit PASS_REGULAR_EXPRESSION "ENGINE_EXAMPLE ok")
+
 # ---------------------------------------------------------------- tools: dump + HTML viewer
 add_executable(systolique_dump tools/array_dump.cpp)
 target_link_libraries(systolique_dump PRIVATE systolique_bench)
