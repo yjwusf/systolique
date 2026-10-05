@@ -10,6 +10,7 @@ endif()
 
 option(SYSTOLIQUE_WERROR "Treat compiler warnings in the project's sources as errors" OFF)
 option(SYSTOLIQUE_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(SYSTOLIQUE_RTL "Build the optional RTL lockstep bench when Verilator and the Verilog exist" ON)
 
 # Warnings for the project's own sources (not for Verilator's generated code).
 set(SYSTOLIQUE_WARNINGS -Wall -Wextra)
@@ -110,6 +111,17 @@ if(Python3_FOUND)
            COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/array_view.py --selftest
                    --dump $<TARGET_FILE:systolique_dump> --out ${CMAKE_CURRENT_BINARY_DIR}/view_test)
   set_tests_properties(systolique_view PROPERTIES LABELS view PASS_REGULAR_EXPRESSION "VIEW_SELFTEST ok")
+  # The stored traces are the files provenance.json lists (sha256, cycles), the configurations
+  # agree with config.cpp, the RTL generator sources are the recorded ones.
+  add_test(NAME systolique_reference_provenance
+           COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/rtl_provenance.py check-traces)
+  set_tests_properties(systolique_reference_provenance PROPERTIES LABELS trace
+    PASS_REGULAR_EXPRESSION "TRACES ok")
 else()
-  message(WARNING "systolique: no Python 3; skipping the viewer tests")
+  message(WARNING "systolique: no Python 3; skipping the viewer and reference provenance tests")
+endif()
+
+# ---------------------------------------------------------------- optional: Gemmini RTL
+if(SYSTOLIQUE_RTL)
+  include(rtl/rtl.cmake)
 endif()
