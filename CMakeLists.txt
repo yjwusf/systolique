@@ -40,7 +40,8 @@ add_library(systolique
   src/systolic_array.cpp
   src/frontend_config.cpp
   src/isa.cpp
-  src/micro_ops.cpp)
+  src/micro_ops.cpp
+  src/scratchpad.cpp)
 target_include_directories(systolique PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_compile_options(systolique PRIVATE ${SYSTOLIQUE_WARNINGS})
 
