@@ -28,6 +28,8 @@ set(SYSTOLIQUE_CONFIGS default dim4 tiled ws_tree os16)
 # ---------------------------------------------------------------- core library (standard C++ only)
 add_library(systolique
   src/config.cpp
-  src/types.cpp)
+  src/types.cpp
+  src/pe.cpp
+  src/tile.cpp)
 target_include_directories(systolique PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_compile_options(systolique PRIVATE ${SYSTOLIQUE_WARNINGS})
