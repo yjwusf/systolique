@@ -1,0 +1,26 @@
+systolique
+
+Parts of this repository are derived from Gemmini (https://github.com/ucb-bar/gemmini,
+v0.7.2, commit 709bc56b6dd859fc2b1a9027a96a0b5be6ad7ed6):
+
+  Copyright (c) 2018-2019, The Regents of the University of California (Regents).
+  All Rights Reserved.
+  BSD-3-Clause; the full license text is in LICENSE.gemmini.
+
+Derived from Gemmini (C++ models of its Chisel hardware, with comments citing its source):
+  include/systolique/arith.h, config.h, types.h, pe.h, tile.h, mesh.h, transposer.h,
+  tag_queue.h, mesh_with_delays.h
+  src/config.cpp, types.cpp, pe.cpp, tile.cpp, mesh.cpp, transposer.cpp, tag_queue.cpp,
+  mesh_with_delays.cpp
+  bench/stimulus.cpp, bench/reference.cpp (request sequences as Gemmini's ExecuteController
+  issues them)
+  docs/microarchitecture.md (description of Gemmini's microarchitecture)
+
+Generated from Gemmini or built on it:
+  rtl/src/GemminiTops.scala (wrappers instantiating Gemmini's Mesh and MeshWithDelays),
+  rtl/build.sbt, rtl/elaborate.sh (compile Gemmini's unmodified sources)
+  tests/reference/gemmini_rtl/ (input/output traces of RTL elaborated from Gemmini's sources)
+
+Gemmini's own sources and the generated Verilog are not included.
+
+The license of the rest of this repository has not been chosen yet (see README.md).
