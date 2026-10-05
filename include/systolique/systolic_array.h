@@ -38,6 +38,7 @@
 
 #include <array>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -84,9 +85,15 @@ struct StateCounts {
 
 // Optional knowledge about a request, given with the cycle in which it is offered (used if it
 // fires then). -1 = decide from the data (see PeState).
+// op / uop: the operation and micro-op (micro_ops.h) whose work the request's PE-cycles are (the
+// compute command if it computes, else the preload or the flush); load_op / load_uop: those of
+// the preload whose D the request carries (its concurrent loads and the provenance of the values
+// it brings in). Bookkeeping only: they never change what the array does.
 struct RequestNote {
   int computes = -1, preloads = -1;
   std::string label;
+  int op = -1, load_op = -1;
+  int64_t uop = -1, load_uop = -1;
 };
 
 // One request (MeshWithDelays interface) or, on the bare Mesh interface, one op: a run of valid
@@ -109,6 +116,8 @@ struct RequestInfo {
   bool computes = false, preloads = false;  // current decision (see PeState)
   bool decided = false;                     // final: note given, or the last row is in
   int note_computes = -1, note_preloads = -1;
+  int op = -1, load_op = -1;          // from its RequestNote (-1: none)
+  int64_t uop = -1, load_uop = -1;
   bool a_nonzero = false, d_nonzero = false;  // seen in its rows so far
   uint64_t valid_pe_cycles = 0;  // PE-cycles its rows occupied (all in state())
   uint64_t result_out_pe_cycles = 0;  // of those, OS cycles with a result leaving through out_c
@@ -137,6 +146,10 @@ struct RegSource {
   int64_t active = -1, last_used = -1;
   uint32_t uses = 0;
   int last_use_request = -1;
+  // The operation and micro-op the value came from: load_op / load_uop of `request` (the preload
+  // whose D brought it in; RequestNote), -1 if unknown.
+  int op = -1;
+  int64_t uop = -1;
 };
 
 // A d handshake row.
@@ -177,6 +190,14 @@ struct Accounting {
   std::vector<StateCounts> per_cycle;    // [cycle], each sums to pes
   std::vector<StateCounts> per_pe;       // [row * cols + col], each sums to cycles
   std::vector<StateCounts> per_request;  // occupied PE-cycles only (no Idle)
+  // Occupied PE-cycles by the micro-op / operation of their request (RequestInfo::uop / op; key
+  // -1: requests without one). With the Idle PE-cycles of `total` they sum to the totals.
+  std::map<int64_t, StateCounts> per_uop;
+  std::map<int, StateCounts> per_op;
+  // PE-cycles in which a shadow register takes a preload's D (state Load, and the
+  // load_concurrent flag of MAC PE-cycles), by the preload micro-op (RequestInfo::load_uop; -1:
+  // none): they sum to total Load + total load_concurrent.
+  std::map<int64_t, uint64_t> loads_by_uop;
   StateCounts total, busy;
   // occupancy = PE-cycles with in_valid / (pes x cycles of the window);
   // utilisation = useful MAC PE-cycles (state Mac) / (pes x cycles of the window).

@@ -290,6 +290,8 @@ RegSource SystolicArray::decode(int64_t token) const {
   s.transposed = d.transposed;
   s.value = d.values[s.lane];
   if (d.request >= 0) {
+    s.op = requests_[size_t(d.request)].load_op;
+    s.uop = requests_[size_t(d.request)].load_uop;
     // ExecuteController.scala:253 (d rows bottom row first); through the transposer
     // (MeshWithDelays.scala:160, 172-173) lane l of input row r ends up as element (l, DIM-1-r).
     s.w_row = int(d.transposed ? s.lane : dim - 1 - d.row);
@@ -455,6 +457,10 @@ void SystolicArray::account_mwd(const MwdIn &in, const MwdOut &o, const RequestN
     R.accept = t;
     if (note) {
       R.label = note->label;
+      R.op = note->op;
+      R.uop = note->uop;
+      R.load_op = note->load_op;
+      R.load_uop = note->load_uop;
       R.note_computes = note->computes;
       R.note_preloads = note->preloads;
       if (note->computes >= 0) R.computes = note->computes > 0;
@@ -694,6 +700,10 @@ Accounting SystolicArray::accounting() const {
     StateCounts s;
     add_entry(requests_, prov, int(r.index), r.valid_pe_cycles, r.result_out_pe_cycles, s);
     a.per_request.push_back(s);
+    a.per_uop[r.uop].add(s);
+    a.per_op[r.op].add(s);
+    const uint64_t loads = s[PeState::Load] + s.load_concurrent;
+    if (loads) a.loads_by_uop[r.load_uop] += loads;
     const int64_t begin = r.accept >= 0 ? r.accept : r.first_in;
     if (begin >= 0 && (a.busy_begin < 0 || begin < a.busy_begin)) a.busy_begin = begin;
   }
@@ -743,6 +753,20 @@ std::string SystolicArray::check(const Accounting &a) {
     sum_r.add(a.per_request[r]);
   }
   sum_r[PeState::Idle] = a.total[PeState::Idle];
+  StateCounts sum_u, sum_o;
+  for (const auto &u : a.per_uop) {
+    if (u.second[PeState::Idle]) return fail("micro-op with idle PE-cycles", u.first);
+    if (!flags_ok(u.second)) return fail("micro-op: a concurrent flag outside its MAC PE-cycles", u.first);
+    sum_u.add(u.second);
+  }
+  for (const auto &o : a.per_op) sum_o.add(o.second);
+  sum_u[PeState::Idle] = sum_o[PeState::Idle] = a.total[PeState::Idle];
+  uint64_t loads = 0;
+  for (const auto &l : a.loads_by_uop) loads += l.second;
+  if (!same(sum_u, a.total)) return "per-micro-op counts do not sum to the totals";
+  if (!same(sum_o, a.total)) return "per-operation counts do not sum to the totals";
+  if (loads != a.total[PeState::Load] + a.total.load_concurrent)
+    return "loads by micro-op do not sum to Load + load_concurrent";
   if (!same(sum_c, a.total)) return "per-cycle counts do not sum to the totals";
   if (!same(sum_p, a.total)) return "per-PE counts do not sum to the totals";
   if (!same(sum_r, a.total)) return "per-request counts do not sum to the totals";
