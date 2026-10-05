@@ -14,6 +14,18 @@
         offline: every trace REF/provenance.json lists exists with its sha256 and cycle count and
         no other trace exists; its configurations equal src/config.cpp's and
         rtl/src/GemminiTops.scala's; the generator sources in rtl/ are the recorded ones
+  fe-provenance --out DIR --gemmini G --rocket-chip R --cde C --hardfloat H --java J --sbt S
+                --generator GEN
+        write DIR/provenance.json for the frontend Verilog rtl/ex/elaborate_ex.sh generated
+        (ExecuteTop, CmdTop, CtrlTop): sources, tools, a digest of every file
+  fe-record --build BUILD [--verilog DIR] [--ref-dir REF]
+        run rtl_fe of BUILD (--write-ref) for the stored frontend tests into
+        REF/<top>/<test>.csv.gz and write REF/provenance.json
+  fe-check-verilog --verilog DIR [--ref-dir REF]
+        fail if the frontend Verilog differs from the one the stored frontend traces were made from
+  fe-check-traces [--ref-dir REF]
+        offline: the stored frontend traces are the recorded files (sha256, cycles), none is
+        missing or extra, and the generator sources in rtl/ex/ are the recorded ones
   correspondence --verilog DIR
         write DIR/<config>/correspondence.txt: the RTL registers behind the model's merged state
         (docs/microarchitecture.md "Cycle correspondence"), found by following the
@@ -32,6 +44,18 @@ GEMMINI_COMMIT = "709bc56b6dd859fc2b1a9027a96a0b5be6ad7ed6"
 HARDFLOAT_REPO = "https://github.com/ucb-bar/berkeley-hardfloat"
 HARDFLOAT_COMMIT = "9deaf1d49f487347be371641ba6ea637b669ad21"
 TOPS = ("MeshTop", "MeshWithDelaysTop")
+FE_REF = os.path.join(ROOT, "tests", "reference", "gemmini_fe")
+FE_GEN = os.path.join(ROOT, "rtl", "ex")
+FE_TOPS = ("ExecuteTop", "CmdTop", "CtrlTop")
+FE_FILES = ("ExecuteTop.v", "CmdTop.v", "CtrlTop.v", "plusarg_reader.v")
+FE_SOURCES = ("build.sbt", "project/build.properties", "elaborate_ex.sh", "src/ExecuteTop.scala",
+              "src/CmdTop.scala", "src/CtrlTop.scala", "src/MidasTargetutils.scala")
+# The stored frontend traces: every directed test of bench/fe_stimulus.cpp and these random seeds.
+FE_SEEDS = {"ExecuteTop": 24, "CmdTop": 40, "CtrlTop": 12}
+ROCKETCHIP_REPO = "https://github.com/chipsalliance/rocket-chip"
+ROCKETCHIP_COMMIT = "67ceb1ddbfd1c6f50d2b4fdadf68f304f5e62287"
+CDE_REPO = "https://github.com/chipsalliance/cde"
+CDE_COMMIT = "384c06b8d45c8184ca2f3fba2f8e78f79d2c1b51"
 
 
 def sha256(path):
@@ -269,6 +293,137 @@ def cmd_check_traces(a):
           f"Gemmini {GEMMINI_TAG} {GEMMINI_COMMIT[:7]}, generator sources as recorded")
 
 
+def cmd_fe_provenance(a):
+    head = git_head(a.gemmini)
+    if head != GEMMINI_COMMIT:
+        print(f"warning: {a.gemmini} is at {head}, not Gemmini {GEMMINI_TAG} ({GEMMINI_COMMIT})")
+    files = {}
+    for f in FE_FILES:
+        p = os.path.join(a.out, f)
+        if os.path.exists(p):
+            files[f] = verilog_digest(p)
+    doc = {
+        "_doc": "Verilog of Gemmini's ExecuteController with its banks (ExecuteTop), its command path "
+                "(CmdTop) and both (CtrlTop), elaborated by rtl/ex/elaborate_ex.sh; written by "
+                "tools/rtl_provenance.py fe-provenance.",
+        "gemmini": {"repo": GEMMINI_REPO, "tag": GEMMINI_TAG, "commit": head,
+                    "files": "src/main/scala/gemmini/*.scala but CustomCPUConfigs.scala, CustomSoCConfigs.scala"},
+        "rocket_chip": {"repo": ROCKETCHIP_REPO, "commit": ROCKETCHIP_COMMIT,
+                        "why": "the commit Chipyard ef3409f (Gemmini v0.7.2's CHIPYARD.hash) pins; a source "
+                               "tarball of it (no git metadata)"},
+        "cde": {"repo": CDE_REPO, "commit": CDE_COMMIT, "why": "rocket-chip 67ceb1d's cde submodule"},
+        "hardfloat": {"repo": HARDFLOAT_REPO, "commit": HARDFLOAT_COMMIT},
+        "chisel": "3.6.0, Scala FIRRTL compiler (chisel3.stage.ChiselStage.emitVerilog)",
+        "scala": "2.13.10",
+        "sbt": "1.10.11 (rtl/ex/project/build.properties)",
+        "java": first_line([a.java, "-version"]),
+        "config": "GemminiConfigs.defaultConfig",
+        "generator": {"command": "rtl/ex/elaborate_ex.sh",
+                      "sources": {f: sha256(os.path.join(a.generator, f)) for f in FE_SOURCES}},
+        "verilog_digest": "sha256 of each file without its // @[...] source locators",
+        "verilog": files,
+    }
+    with open(os.path.join(a.out, "provenance.json"), "w") as f:
+        json.dump(doc, f, indent=1)
+        f.write("\n")
+    print(f"wrote {os.path.join(a.out, 'provenance.json')}: {len(files)} Verilog files")
+
+
+def cmd_fe_record(a):
+    with open(os.path.join(a.verilog, "provenance.json")) as f:
+        vprov = json.load(f)
+    traces, stored = {}, {}
+    exe = os.path.join(a.build, "rtl_fe")
+    for top in FE_TOPS:
+        out = os.path.join(a.ref_dir, top)
+        os.makedirs(out, exist_ok=True)
+        for old in glob.glob(os.path.join(out, "*.csv.gz")):
+            os.remove(old)
+        comments = [f"gemmini {vprov['gemmini']['tag']} {vprov['gemmini']['commit']}",
+                    f"verilog digest {vprov['verilog'][top + '.v']} ({top}.v)"]
+        cmd = [exe, "--top", top, "--catalog", "--seeds", str(FE_SEEDS[top]), "--write-ref", out]
+        for c in comments:
+            cmd += ["--comment", c]
+        p = subprocess.run(cmd, capture_output=True, text=True)
+        sys.stdout.write("".join(l + "\n" for l in p.stdout.splitlines() if "tests=" in l))
+        if p.returncode:
+            sys.stdout.write(p.stdout + p.stderr)
+            raise SystemExit(f"{exe} --top {top} failed")
+        names = []
+        for path in sorted(glob.glob(os.path.join(out, "*.csv.gz"))):
+            with gzip.open(path, "rt") as f:
+                rows = sum(1 for l in f if l and l[0].isdigit())
+            traces[os.path.relpath(path, a.ref_dir)] = {"sha256": sha256(path), "cycles": rows}
+            names.append(os.path.basename(path)[:-7])
+        stored[top] = names
+    doc = {
+        "_doc": "Reference traces of Gemmini's frontend RTL tops (inputs and outputs of every cycle from "
+                "cycle 0, after four reset cycles), made by rtl_fe (rtl/fe_bench.cpp) while the model "
+                "matched them; written by tools/rtl_provenance.py fe-record.",
+        "verilator": verilator_version(a.build),
+        "rtl": vprov,
+        "traces": traces,
+    }
+    with open(os.path.join(a.ref_dir, "provenance.json"), "w") as f:
+        json.dump(doc, f, indent=1)
+        f.write("\n")
+    print(f"wrote {os.path.relpath(os.path.join(a.ref_dir, 'provenance.json'), ROOT)}: "
+          f"{len(traces)} traces, {sum(t['cycles'] for t in traces.values())} cycles")
+
+
+def cmd_fe_check_verilog(a):
+    with open(os.path.join(a.ref_dir, "provenance.json")) as f:
+        want = json.load(f)["rtl"]["verilog"]
+    bad = []
+    for rel, sha in sorted(want.items()):
+        p = os.path.join(a.verilog, rel)
+        if not os.path.exists(p):
+            bad.append(f"{rel}: missing")
+        elif verilog_digest(p) != sha:
+            bad.append(f"{rel}: differs from the Verilog the frontend traces were made from")
+    if bad:
+        print("\n".join(bad))
+        raise SystemExit("VERILOG differs (regenerate with rtl/ex/elaborate_ex.sh, or re-record)")
+    print(f"VERILOG ok: {len(want)} frontend files as recorded")
+
+
+def cmd_fe_check_traces(a):
+    errors = []
+    with open(os.path.join(a.ref_dir, "provenance.json")) as f:
+        prov = json.load(f)
+    rtl = prov["rtl"]
+    if rtl["gemmini"]["commit"] != GEMMINI_COMMIT:
+        errors.append(f"the traces are from Gemmini {rtl['gemmini']['commit']}, not {GEMMINI_COMMIT}")
+    if rtl["rocket_chip"]["commit"] != ROCKETCHIP_COMMIT or rtl["cde"]["commit"] != CDE_COMMIT:
+        errors.append("the traces are not from the pinned rocket-chip / cde")
+    listed = set(prov["traces"])
+    cycles = 0
+    for rel, t in sorted(prov["traces"].items()):
+        p = os.path.join(a.ref_dir, rel)
+        if not os.path.exists(p):
+            errors.append(f"{rel}: missing")
+            continue
+        if sha256(p) != t["sha256"]:
+            errors.append(f"{rel}: changed since it was recorded")
+        with gzip.open(p, "rt") as f:
+            rows = sum(1 for l in f if l and l[0].isdigit())
+        if rows != t["cycles"]:
+            errors.append(f"{rel}: {rows} cycles, {t['cycles']} recorded")
+        cycles += rows
+    for p in glob.glob(os.path.join(a.ref_dir, "*", "*.csv.gz")):
+        if os.path.relpath(p, a.ref_dir) not in listed:
+            errors.append(f"{os.path.relpath(p, a.ref_dir)}: not in provenance.json")
+    for rel, sha in sorted(rtl["generator"]["sources"].items()):
+        p = os.path.join(FE_GEN, rel)
+        if not os.path.exists(p) or sha256(p) != sha:
+            errors.append(f"rtl/ex/{rel} is not the generator source the traces were made with")
+    if errors:
+        print("\n".join(errors))
+        raise SystemExit("TRACES inconsistent")
+    print(f"TRACES ok: {len(listed)} frontend traces, {cycles} cycles, Gemmini {GEMMINI_TAG} "
+          f"{GEMMINI_COMMIT[:7]}, rocket-chip {ROCKETCHIP_COMMIT[:7]}, cde {CDE_COMMIT[:7]}, generator sources as recorded")
+
+
 COPY = re.compile(r"^    (\w+) <= (\w+);")
 ASSIGN = re.compile(r"^  assign (\w+) = (\w+);")
 
@@ -404,9 +559,23 @@ def main():
     p.add_argument("--verilog", required=True)
     p = sub.add_parser("check-traces")
     p.add_argument("--ref-dir", default=REF)
+    p = sub.add_parser("fe-provenance")
+    for k in ("out", "gemmini", "rocket-chip", "cde", "hardfloat", "java", "sbt", "generator"):
+        p.add_argument("--" + k, required=True)
+    p = sub.add_parser("fe-record")
+    p.add_argument("--build", required=True)
+    p.add_argument("--verilog", default=os.path.expanduser("~/opt/gemmini-verilog-709bc56/frontend"))
+    p.add_argument("--ref-dir", default=FE_REF)
+    p = sub.add_parser("fe-check-verilog")
+    p.add_argument("--verilog", required=True)
+    p.add_argument("--ref-dir", default=FE_REF)
+    p = sub.add_parser("fe-check-traces")
+    p.add_argument("--ref-dir", default=FE_REF)
     a = ap.parse_args()
     {"provenance": cmd_provenance, "record": cmd_record, "check-verilog": cmd_check_verilog,
-     "check-traces": cmd_check_traces, "correspondence": cmd_correspondence}[a.cmd](a)
+     "check-traces": cmd_check_traces, "correspondence": cmd_correspondence,
+     "fe-provenance": cmd_fe_provenance, "fe-record": cmd_fe_record,
+     "fe-check-verilog": cmd_fe_check_verilog, "fe-check-traces": cmd_fe_check_traces}[a.cmd](a)
 
 
 if __name__ == "__main__":

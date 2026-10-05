@@ -59,7 +59,10 @@ add_library(systolique_bench
   bench/trace_io.cpp
   bench/stimulus.cpp
   bench/reference.cpp
-  bench/run.cpp)
+  bench/run.cpp
+  bench/fe_ports.cpp
+  bench/fe_stimulus.cpp
+  bench/fe_run.cpp)
 target_include_directories(systolique_bench PUBLIC ${PROJECT_SOURCE_DIR}/bench)
 target_link_libraries(systolique_bench PUBLIC systolique ZLIB::ZLIB)
 target_compile_options(systolique_bench PRIVATE ${SYSTOLIQUE_WARNINGS})
@@ -135,4 +138,5 @@ endif()
 # ---------------------------------------------------------------- optional: Gemmini RTL
 if(SYSTOLIQUE_RTL)
   include(rtl/rtl.cmake)
+  include(rtl/fe.cmake)
 endif()
