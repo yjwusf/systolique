@@ -39,3 +39,15 @@ add_library(systolique
   src/systolic_array.cpp)
 target_include_directories(systolique PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_compile_options(systolique PRIVATE ${SYSTOLIQUE_WARNINGS})
+
+# ---------------------------------------------------------------- bench library (traces need zlib)
+find_package(ZLIB REQUIRED)
+add_library(systolique_bench
+  bench/ports.cpp
+  bench/trace_io.cpp
+  bench/stimulus.cpp
+  bench/reference.cpp
+  bench/run.cpp)
+target_include_directories(systolique_bench PUBLIC ${PROJECT_SOURCE_DIR}/bench)
+target_link_libraries(systolique_bench PUBLIC systolique ZLIB::ZLIB)
+target_compile_options(systolique_bench PRIVATE ${SYSTOLIQUE_WARNINGS})
