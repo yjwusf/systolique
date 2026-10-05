@@ -90,3 +90,9 @@ set_tests_properties(systolique_classes PROPERTIES LABELS unit PASS_REGULAR_EXPR
 add_test(NAME systolique_accounting_example COMMAND example_test)
 set_tests_properties(systolique_accounting_example PROPERTIES LABELS unit
   PASS_REGULAR_EXPRESSION "EXAMPLE ok")
+
+# The VCD writer changes no output and no count.
+systolique_test_program(vcd_test)
+add_test(NAME systolique_vcd COMMAND vcd_test --ref-dir ${SYSTOLIQUE_REF_DIR}
+         --out ${CMAKE_CURRENT_BINARY_DIR}/vcd_out)
+set_tests_properties(systolique_vcd PROPERTIES LABELS vcd PASS_REGULAR_EXPRESSION "VCD ok")
