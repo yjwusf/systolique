@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Systolic array view</title>
+<!-- Template of tools/array_view.py: the data of one SystolicArray run
+     (tools/array_dump.cpp) goes into the script element "data". -->
+<style>
+:root {
+  color-scheme: light;
+  --bg: #fcfcfb; --panel: #f4f3f0; --line: #dddbd5; --ink: #0b0b0b; --ink2: #52514e; --ink3: #7a7975;
+  --none: #e9e8e4; --hatch: #c9c7c0;
+  --st-mac: #2b2a27; --st-load: #8d8b85; --st-drain: #b5b3ac; --st-bubble: #dcdad3;
+  --op0: #2a78d6; --op1: #eb6834; --op2: #1baf7a; --op3: #eda100; --op4: #e87ba4; --op5: #008300; --op6: #4a3aa7; --op7: #e34948;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1a1a19; --panel: #232321; --line: #3a3a37; --ink: #ffffff; --ink2: #c3c2b7; --ink3: #8f8e86;
+    --none: #2c2c2a; --hatch: #45453f;
+    --st-mac: #e6e4dd; --st-load: #9c9a92; --st-drain: #6b6a64; --st-bubble: #45443f;
+    --op0: #3987e5; --op1: #d95926; --op2: #199e70; --op3: #c98500; --op4: #d55181; --op5: #008300; --op6: #9085e9; --op7: #e66767;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1a1a19; --panel: #232321; --line: #3a3a37; --ink: #ffffff; --ink2: #c3c2b7; --ink3: #8f8e86;
+  --none: #2c2c2a; --hatch: #45453f;
+  --st-mac: #e6e4dd; --st-load: #9c9a92; --st-drain: #6b6a64; --st-bubble: #45443f;
+  --op0: #3987e5; --op1: #d95926; --op2: #199e70; --op3: #c98500; --op4: #d55181; --op5: #008300; --op6: #9085e9; --op7: #e66767;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1240px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 20px; margin: 0 0 2px; }
+.sub { color: var(--ink2); margin: 0 0 12px; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+button, select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--op0); outline-offset: 1px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 12px; }
+.controls input[type=range] { flex: 1 1 240px; min-width: 160px; }
+.cyc { min-width: 120px; font-variant-numeric: tabular-nums; }
+.layout { display: grid; grid-template-columns: minmax(0, auto) minmax(280px, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink2); margin: 0 0 6px; font-weight: 600; }
+.gridwrap { position: relative; }
+.axis { color: var(--ink3); font-size: 11px; }
+#grid { display: grid; gap: 2px; touch-action: manipulation; }
+.cell { position: relative; border-radius: 3px; background: var(--none); cursor: pointer; overflow: hidden; }
+.cell.nosrc { background: repeating-linear-gradient(45deg, var(--none) 0 3px, var(--hatch) 3px 5px); }
+.cell .inner { position: absolute; left: 30%; top: 30%; width: 40%; height: 40%; border-radius: 2px; border: 1.5px solid var(--bg); }
+.cell .inner.nosrc { background: repeating-linear-gradient(45deg, var(--none) 0 2px, var(--hatch) 2px 4px); }
+.cell .badge { position: absolute; left: 1px; top: 1px; min-width: 11px; height: 11px; padding: 0 2px; border-radius: 2px; font: 600 9px/11px ui-monospace, Menlo, monospace; text-align: center; background: var(--bg); color: var(--ink); }
+.cell.idle { opacity: .38; }
+.cell .lc { position: absolute; right: 0; top: 0; width: var(--tri, 9px); height: var(--tri, 9px); background: var(--ink); clip-path: polygon(0 0, 100% 0, 100% 100%); }
+.cell .dc { position: absolute; right: 0; bottom: 0; width: var(--tri, 9px); height: var(--tri, 9px); background: var(--ink); clip-path: polygon(100% 0, 100% 100%, 0 100%); }
+.cell .txt { position: absolute; left: 0; right: 0; bottom: 2px; text-align: center; font: 10px/1 ui-monospace, Menlo, monospace; color: #fff; text-shadow: 0 0 2px #000; }
+.cell.sel { outline: 2px solid var(--ink); outline-offset: 1px; z-index: 2; }
+.counts { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; align-items: center; font-variant-numeric: tabular-nums; }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; }
+.bar { height: 8px; border-radius: 4px; background: var(--st-mac); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; font-variant-numeric: tabular-nums; }
+.kv .k { color: var(--ink2); }
+.reg { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 6px; }
+.note { color: var(--ink2); font-size: 12.5px; }
+canvas { display: block; width: 100%; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 3px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--ink2); font-weight: 600; font-size: 12px; }
+td.l, th.l { text-align: left; white-space: normal; }
+.tablewrap { overflow-x: auto; }
+.legend-states { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; }
+.mini { position: relative; display: inline-block; width: 22px; height: 22px; border-radius: 3px; background: var(--none); vertical-align: middle; overflow: hidden; }
+#tip { position: fixed; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 12px; display: none; z-index: 10; font-variant-numeric: tabular-nums; }
+.row2 { display: grid; gap: 16px; margin-top: 16px; }
+kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--bg); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Gemmini systolic array: PE states and register provenance</h1>
+  <p class="sub" id="sub"></p>
+  <div class="controls" role="group" aria-label="cycle controls">
+    <button id="first" title="first cycle (Home)">&#x23EE;</button>
+    <button id="prev" title="previous cycle (&#8592;, Shift: 10)">&#x25C0;</button>
+    <button id="play" title="play / pause (Space)">&#x25B6; play</button>
+    <button id="next" title="next cycle (&#8594;, Shift: 10)">&#x25B6;&#xFE0E;|</button>
+    <button id="last" title="last cycle (End)">&#x23ED;</button>
+    <input id="scrub" type="range" min="0" value="0" aria-label="cycle">
+    <span class="cyc mono" id="cyc"></span>
+    <select id="speed" aria-label="playback speed"><option value="2">2 cycles/s</option><option value="6" selected>6 cycles/s</option><option value="15">15 cycles/s</option><option value="40">40 cycles/s</option></select>
+    <button id="theme" title="light / dark (T)">theme</button>
+  </div>
+  <div class="layout">
+    <div style="display:grid;gap:16px;min-width:0">
+    <section class="panel gridwrap" aria-label="PE grid">
+      <h2>PEs in this cycle <span class="axis">(row r down, column c across)</span></h2>
+      <div id="grid"></div>
+      <p class="note" id="gridnote"></p>
+    </section>
+    <section class="panel"><h2>PEs per state over the run <span class="axis">(click to jump to a cycle)</span></h2><canvas id="timeline" height="150" aria-label="PEs per state per cycle"></canvas><div class="legend-states" id="tlegend" style="margin-top:6px"></div></section>
+    </div>
+    <div style="display:grid;gap:16px">
+      <section class="panel"><h2>This cycle</h2><div id="counters"></div></section>
+      <section class="panel"><h2>PE detail <span class="axis">(hover or click a PE)</span></h2><div id="detail" class="note">No PE selected.</div></section>
+    </div>
+  </div>
+  <div class="row2">
+    <section class="panel"><h2>States and marks</h2><div class="legend-states" id="slegend"></div><p class="note" id="rule"></p></section>
+    <section class="panel"><h2>Requests (ops)</h2><div class="tablewrap"><table id="ops"></table></div><p class="note" id="opsnote"></p></section>
+  </div>
+</main>
+<div id="tip"></div>
+<script type="application/json" id="data">/*DATA*/</script>
+<script>
+(function () {
+"use strict";
+const D = JSON.parse(document.getElementById("data").textContent);
+const M = D.meta, DIM = M.dim, COLS = M.cols, PES = DIM * COLS, T = M.cycles;
+const STATES = M.states;                        // idle, mac, load, drain, bubble
+const SHORT = { idle: "", mac: "M", load: "L", drain: "D", bubble: "B" };
+const NAMES = { idle: "idle", mac: "MAC", load: "load", drain: "drain", bubble: "bubble" };
+const B64 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_";
+const b64 = (s, i, n) => { let v = 0; for (let k = 0; k < n; ++k) v = v * 64 + B64.indexOf(s[i + k]); return v; };
+const isWS = r => r && r.dataflow === "WS";
+const OPN = M.array_dataflow === "OS" ? "D" : null;
+
+// Frames: per cycle and PE the state, active register, flags and request (tools/array_dump.cpp).
+const st = new Uint8Array(T * PES), act = new Uint8Array(T * PES), fl = new Uint8Array(T * PES);
+const rq = new Int32Array(T * PES);
+{
+  const code = new Uint8Array(PES), req = new Int32Array(PES).fill(-1);
+  D.frames.forEach((f, t) => {
+    if (f[0] === "f") for (let p = 0; p < PES; ++p) { code[p] = b64(f, 1 + 3 * p, 1); req[p] = b64(f, 2 + 3 * p, 2) - 1; }
+    else for (let i = 1; i < f.length; i += 5) { const p = b64(f, i, 2); code[p] = b64(f, i + 2, 1); req[p] = b64(f, i + 3, 2) - 1; }
+    for (let p = 0; p < PES; ++p) {
+      const c = code[p], o = t * PES + p;
+      st[o] = c % 5; act[o] = Math.floor(c / 5) % 2; fl[o] = Math.floor(c / 10); rq[o] = req[p];
+    }
+  });
+}
+// Register at cycle t: the last event of PE p, register k, at or before t.
+function reg(p, k, t) {
+  const ev = D.events[p];
+  let e = null;
+  for (let i = 0; i < ev.length && ev[i][0] <= t; ++i) if (ev[i][1] === k) e = ev[i];
+  if (!e) return null;
+  const s = e[2] >= 0 ? D.sources[e[2]] : null;
+  return { src: s, loaded: e[3], value: e.length > 4 ? e[4] : (s ? s[3] : 0) };
+}
+// Use since loaded, as SystolicArray::pe() reports it: cycles in which the PE is valid and the
+// register is the active one (WS multiplicand, OS accumulator), up to and including t.
+function use(p, k, loaded, t) {
+  let first = -1, lastc = -1, n = 0;
+  for (let c = Math.max(0, loaded + 1); c <= t; ++c) {
+    const o = c * PES + p;
+    if (st[o] !== 0 && act[o] === k) { if (first < 0) first = c; lastc = c; ++n; }
+  }
+  return { first, last: lastc, n };
+}
+const opColor = q => q < 0 ? null : `var(--op${q % 8})`;
+const opName = q => {
+  if (q < 0) return "none";
+  const r = D.requests[q];
+  return `#${q}` + (r && r.tag_valid ? ` (tag ${r.tag})` : "");
+};
+const mat = q => { const r = D.requests[q]; return r && r.dataflow === "OS" ? "D" : "W"; };
+
+// ---------------------------------------------------------------- header
+document.getElementById("sub").textContent =
+  `config ${M.config}: ${DIM}x${COLS} PEs (${M.tile_rows}x${M.tile_cols} per tile, tile_latency ${M.tile_latency}, output_delay ${M.output_delay}), ${M.array_dataflow} array, ` +
+  `int${M.in_bits} in / int${M.out_bits} out. Scenario ${M.scenario}, ${T} cycles from reset release, ${D.requests.length} requests.`;
+document.getElementById("rule").innerHTML =
+  `<b>1 PE = 1 MAC per cycle.</b> Every PE-cycle is one MAC slot (peak ${PES} MACs per cycle) and has exactly one state; ` +
+  `useful MACs = PE-cycles in MAC. A weight (WS) or D (OS) shifting into the shadow register in the same cycle as a MAC ` +
+  `is the concurrent-load mark, an OS result shifting out alongside a MAC the concurrent-drain mark; neither is a second state or a second MAC. ` +
+  `Cell colour: the op whose ${M.array_dataflow === "OS" ? "D / result" : "weight"} is in the active register (WS: the multiplicand, OS: the accumulator); ` +
+  `inner square: the op of the shadow register; hatched: power-on value or no source. Colours repeat every 8 ops (the op number is in the table and the PE detail). ` +
+  `Keys: <kbd>&#8592;</kbd> <kbd>&#8594;</kbd> step (Shift: 10), <kbd>Home</kbd> <kbd>End</kbd>, <kbd>Space</kbd> play, <kbd>T</kbd> theme, <kbd>Esc</kbd> clear selection.`;
+
+// ---------------------------------------------------------------- grid
+const grid = document.getElementById("grid");
+const cellPx = Math.max(16, Math.min(84, Math.floor(560 / DIM)));
+grid.style.gridTemplateColumns = `repeat(${COLS}, ${cellPx}px)`;
+grid.style.gridAutoRows = `${cellPx}px`;
+grid.style.setProperty("--tri", `${Math.max(7, Math.round(cellPx * 0.3))}px`);
+const cells = [];
+for (let p = 0; p < PES; ++p) {
+  const d = document.createElement("div");
+  d.className = "cell";
+  d.dataset.p = p;
+  d.setAttribute("role", "button");
+  d.setAttribute("aria-label", `PE ${Math.floor(p / COLS)},${p % COLS}`);
+  d.innerHTML = '<div class="inner"></div><div class="badge"></div><div class="lc" hidden></div><div class="dc" hidden></div><div class="txt"></div>';
+  grid.appendChild(d);
+  cells.push({ d, inner: d.children[0], badge: d.children[1], lc: d.children[2], dc: d.children[3], txt: d.children[4] });
+}
+document.getElementById("gridnote").textContent =
+  "Badge: M MAC, L load (weight/D shift, no MAC), D drain (OS flush), B bubble; faded: idle. " +
+  "Top-right triangle: concurrent load (MAC + shadow load); bottom-right: concurrent drain (MAC + OS result shifting out).";
+
+let cur = 0, sel = -1, hov = -1, timer = null;
+function drawGrid() {
+  for (let p = 0; p < PES; ++p) {
+    const o = cur * PES + p, c = cells[p], a = act[o];
+    const ra = reg(p, a, cur), rs = reg(p, 1 - a, cur);
+    const qa = ra && ra.src ? ra.src[0] : -1, qs = rs && rs.src ? rs.src[0] : -1;
+    c.d.style.background = qa >= 0 ? opColor(qa) : "";
+    c.d.classList.toggle("nosrc", qa < 0);
+    c.inner.style.background = qs >= 0 ? opColor(qs) : "";
+    c.inner.classList.toggle("nosrc", qs < 0);
+    const s = STATES[st[o]];
+    c.d.classList.toggle("idle", st[o] === 0);
+    c.badge.textContent = SHORT[s];
+    c.badge.hidden = st[o] === 0;
+    c.lc.hidden = !(fl[o] & 1);
+    c.dc.hidden = !(fl[o] & 2);
+    c.txt.textContent = cellPx >= 56 && ra && ra.src && ra.src[1] >= 0 ? `${mat(qa)}${qa}[${ra.src[1]}][${ra.src[2]}]` : "";
+    c.d.classList.toggle("sel", p === sel);
+  }
+}
+
+// ---------------------------------------------------------------- counters
+const PC = D.per_cycle;  // [state...] + load_concurrent, drain_concurrent, per cycle
+const cumMac = new Float64Array(T + 1), cumOcc = new Float64Array(T + 1);
+for (let t = 0; t < T; ++t) { cumMac[t + 1] = cumMac[t] + PC[1][t]; cumOcc[t + 1] = cumOcc[t] + (PES - PC[0][t]); }
+const fmt = x => x.toLocaleString("en-US");
+function drawCounters() {
+  const t = cur;
+  let h = '<div class="counts">';
+  ["mac", "load", "drain", "bubble", "idle"].forEach(s => {
+    const k = STATES.indexOf(s), n = PC[k][t];
+    h += `<span><span class="sw" style="background:var(--st-${s === "idle" ? "bubble" : s});${s === "idle" ? "opacity:.35" : ""}"></span> ${NAMES[s]}</span>` +
+      `<div class="bar" style="width:${(100 * n / PES).toFixed(1)}%;background:var(--st-${s === "idle" ? "bubble" : s});${s === "idle" ? "opacity:.35" : ""}"></div><span>${n}</span>`;
+  });
+  h += `<span>&#9650; concurrent load</span><span></span><span>${PC[5][t]}</span>`;
+  h += `<span>&#9660; concurrent drain</span><span></span><span>${PC[6][t]}</span></div>`;
+  const win = t + 1;
+  h += '<div class="kv" style="margin-top:8px">' +
+    `<span class="k">useful MACs so far</span><span>${fmt(cumMac[t + 1])}</span>` +
+    `<span class="k">occupancy, cycles 0..${t}</span><span>${(cumOcc[t + 1] / (PES * win)).toFixed(3)}</span>` +
+    `<span class="k">utilisation, cycles 0..${t}</span><span>${(cumMac[t + 1] / (PES * win)).toFixed(3)}</span>` +
+    `<span class="k">whole run (0..${T - 1})</span><span>occ ${D.totals.occupancy.toFixed(3)}, util ${D.totals.utilisation.toFixed(3)}, ${fmt(D.totals.run.mac)} MACs</span>` +
+    `<span class="k">busy window ${M.busy_begin}..${M.busy_end}</span><span>occ ${D.totals.busy_occupancy.toFixed(3)}, util ${D.totals.busy_utilisation.toFixed(3)}</span></div>` +
+    `<p class="note" style="margin:6px 0 0">Occupancy = PE-cycles with in_valid / (${PES} x cycles of the window); utilisation = MAC PE-cycles / (${PES} x cycles). Busy window: first request accepted to the last occupied cycle.</p>`;
+  document.getElementById("counters").innerHTML = h;
+}
+
+// ---------------------------------------------------------------- PE detail
+function regHtml(p, k, t, isActive) {
+  const r = reg(p, k, t), o = t * PES + p;
+  const df = D.requests[rq[o]] ? D.requests[rq[o]].dataflow : M.array_dataflow;
+  const role = isActive ? (df === "OS" ? "active: accumulator" : "active: weight (multiplicand)")
+                        : (df === "OS" ? "shadow: D preload / result out" : "shadow: weight being loaded");
+  let h = `<div class="reg"><b>c${k + 1}</b> <span class="note">${role}</span><div class="kv">`;
+  if (!r) return h + '<span class="k">value</span><span>unknown</span></div></div>';
+  h += `<span class="k">value</span><span class="mono">${r.value}</span>`;
+  if (r.src) {
+    const s = r.src, q = s[0], R = D.requests[q];
+    h += `<span class="k">op</span><span><span class="sw" style="background:${opColor(q)}"></span> ${opName(q)}${R && R.label ? " " + R.label : ""}</span>`;
+    if (s[1] >= 0) h += `<span class="k">element</span><span class="mono">${mat(q)}${q}[${s[1]}][${s[2]}]${s[6] ? " (through the transposer)" : ""}</span>`;
+    h += `<span class="k">d input</span><span class="mono">row ${s[8]} of #${q}, lane ${s[5]}: handshake ${s[4]} at cycle ${s[7]}, value ${s[3]}</span>`;
+  } else {
+    h += '<span class="k">op</span><span>none (power-on value)</span>';
+  }
+  const u = use(p, k, r.loaded, t);
+  h += `<span class="k">loaded at</span><span>${r.loaded >= 0 ? "cycle " + r.loaded + (rq[r.loaded * PES + p] >= 0 ? " by " + opName(rq[r.loaded * PES + p]) : "") : "before cycle 0"}</span>`;
+  h += `<span class="k">active since</span><span>${u.first >= 0 ? "cycle " + u.first : "not yet"}</span>`;
+  h += `<span class="k">last used</span><span>${u.last >= 0 ? "cycle " + u.last + ` (${u.n} cycles in use)` : "not yet"}</span>`;
+  return h + "</div></div>";
+}
+function drawDetail() {
+  const p = hov >= 0 ? hov : sel, el = document.getElementById("detail");
+  if (p < 0) { el.className = "note"; el.textContent = "No PE selected."; return; }
+  el.className = "";
+  const t = cur, o = t * PES + p, r = Math.floor(p / COLS), c = p % COLS, q = rq[o];
+  let h = `<div class="kv"><span class="k">PE</span><span>row ${r}, column ${c}</span>` +
+    `<span class="k">cycle ${t}</span><span><b>${NAMES[STATES[st[o]]]}</b>${fl[o] & 1 ? ", concurrent load" : ""}${fl[o] & 2 ? ", concurrent drain" : ""}</span>` +
+    `<span class="k">row of</span><span>${q >= 0 ? opName(q) : "no row (in_valid low)"}</span></div>`;
+  h += regHtml(p, act[o], t, true) + regHtml(p, 1 - act[o], t, false);
+  const so = [0, 0, 0, 0, 0];
+  for (let k = 0; k <= t; ++k) so[st[k * PES + p]]++;
+  const w = D.per_pe[p];
+  h += '<div class="reg"><b>cycles per state</b> <span class="note">0..' + t + " / whole run</span><div class=\"kv\">";
+  ["mac", "load", "drain", "bubble", "idle"].forEach(s => { const k = STATES.indexOf(s); h += `<span class="k">${NAMES[s]}</span><span>${so[k]} / ${w[k]}</span>`; });
+  h += `<span class="k">concurrent load</span><span>${w[5]} (run)</span></div></div>`;
+  el.innerHTML = h;
+}
+
+// ---------------------------------------------------------------- timeline
+const cv = document.getElementById("timeline"), tip = document.getElementById("tip");
+const ORDER = ["mac", "load", "drain", "bubble"];
+function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function drawTimeline() {
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = 150;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+  const L = 36, R = 6, top = 6, bot = 18, pw = W - L - R, ph = H - top - bot;
+  const x = t => L + (t / Math.max(1, T)) * pw, y = n => top + ph - (n / PES) * ph;
+  g.strokeStyle = css("--line"); g.fillStyle = css("--ink3"); g.font = "11px system-ui"; g.lineWidth = 1;
+  [0, PES / 2, PES].forEach(n => { g.beginPath(); g.moveTo(L, y(n) + .5); g.lineTo(W - R, y(n) + .5); g.stroke(); g.fillText(String(n), 2, y(n) + 4); });
+  g.textAlign = "center";
+  for (let t = 0; t < T; t += Math.max(1, Math.ceil(T / 8 / 16) * 16)) g.fillText(String(t), Math.min(x(t), W - R - 12), H - 4);
+  g.textAlign = "start";
+  const base = new Float64Array(T);
+  ORDER.forEach(s => {
+    const k = STATES.indexOf(s);
+    g.fillStyle = css("--st-" + s);
+    g.beginPath();
+    for (let t = 0; t < T; ++t) { g.rect(x(t), y(base[t] + PC[k][t]), Math.max(1, pw / T), (PC[k][t] / PES) * ph); base[t] += PC[k][t]; }
+    g.fill();
+  });
+  g.strokeStyle = css("--op1"); g.lineWidth = 2; g.beginPath();
+  for (let t = 0; t < T; ++t) { const xx = x(t + .5), yy = y(PC[5][t]); t ? g.lineTo(xx, yy) : g.moveTo(xx, yy); }
+  g.stroke();
+  g.strokeStyle = css("--ink"); g.lineWidth = 1.5; g.beginPath(); g.moveTo(x(cur + .5), top); g.lineTo(x(cur + .5), top + ph); g.stroke();
+  cv._x = { L, pw };
+}
+function tAt(ev) { const r = cv.getBoundingClientRect(), { L, pw } = cv._x; return Math.max(0, Math.min(T - 1, Math.floor(((ev.clientX - r.left) - L) / pw * T))); }
+cv.addEventListener("click", ev => go(tAt(ev)));
+cv.addEventListener("mousemove", ev => {
+  const t = tAt(ev);
+  tip.style.display = "block"; tip.style.left = (ev.clientX + 12) + "px"; tip.style.top = (ev.clientY + 12) + "px";
+  tip.innerHTML = `cycle ${t}<br>` + ORDER.map(s => `${NAMES[s]} ${PC[STATES.indexOf(s)][t]}`).join("<br>") + `<br>idle ${PC[0][t]}<br>concurrent load ${PC[5][t]}`;
+});
+cv.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+document.getElementById("tlegend").innerHTML = ORDER.map(s => `<span><span class="sw" style="background:var(--st-${s})"></span> ${NAMES[s]}</span>`).join("") +
+  '<span><span class="sw" style="background:var(--op1);height:3px;vertical-align:3px"></span> concurrent load (MAC PE-cycles with a shadow load)</span><span class="note">idle = the rest up to ' + PES + "</span>";
+document.getElementById("slegend").innerHTML =
+  ["mac", "load", "drain", "bubble", "idle"].map(s => `<span><span class="mini" style="background:var(--op0);${s === "idle" ? "opacity:.38" : ""}"><span class="badge" style="position:absolute;left:1px;top:1px;font:600 9px/11px ui-monospace,monospace;background:var(--bg);padding:0 2px;border-radius:2px">${SHORT[s] || "&nbsp;"}</span></span> ${NAMES[s]}</span>`).join("") +
+  '<span><span class="mini" style="background:var(--op0)"><span style="position:absolute;right:0;top:0;width:9px;height:9px;background:var(--ink);clip-path:polygon(0 0,100% 0,100% 100%)"></span></span> concurrent load</span>' +
+  '<span><span class="mini" style="background:var(--op0)"><span style="position:absolute;right:0;bottom:0;width:9px;height:9px;background:var(--ink);clip-path:polygon(100% 0,100% 100%,0 100%)"></span></span> concurrent drain</span>' +
+  '<span><span class="mini" style="background:var(--op0)"><span style="position:absolute;left:30%;top:30%;width:40%;height:40%;background:var(--op1);border:1.5px solid var(--bg)"></span></span> inner square: op of the shadow register</span>' +
+  '<span><span class="mini nosrc" style="background:repeating-linear-gradient(45deg,var(--none) 0 3px,var(--hatch) 3px 5px)"></span> no source</span>';
+
+// ---------------------------------------------------------------- ops table
+{
+  const cyc = v => v >= 0 ? v : "-";
+  let h = '<thead><tr><th class="l">op</th><th class="l">what</th><th>df</th><th>tag</th><th>accept</th><th>first in</th><th>last in</th><th>first out</th><th>last out</th><th>result rows</th>' +
+    "<th>MAC</th><th>load</th><th>drain</th><th>bubble</th><th>conc. load</th><th>MACs</th></tr></thead><tbody>";
+  D.requests.forEach(r => {
+    const pc = r.pe_cycles;
+    h += `<tr><td class="l"><span class="sw" style="background:${opColor(r.index)}"></span> #${r.index}</td><td class="l">${r.label || (r.flush ? "flush" : "")}</td>` +
+      `<td>${r.dataflow}</td><td>${r.tag_valid ? r.tag : "-"}</td><td>${cyc(r.accept)}</td><td>${cyc(r.first_in)}</td><td>${cyc(r.last_in)}</td><td>${cyc(r.first_out)}</td><td>${cyc(r.last_out)}</td>` +
+      `<td>${r.result_first >= 0 ? r.result_first + "-" + r.result_last : "-"}</td><td>${fmt(pc.mac)}</td><td>${fmt(pc.load)}</td><td>${fmt(pc.drain)}</td><td>${fmt(pc.bubble)}</td><td>${fmt(pc.load_concurrent)}</td><td>${fmt(r.macs)}</td></tr>`;
+  });
+  const tt = D.totals.run;
+  h += `<tr><td class="l"><b>total</b></td><td class="l"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>${fmt(tt.mac)}</td><td>${fmt(tt.load)}</td><td>${fmt(tt.drain)}</td><td>${fmt(tt.bubble)}</td><td>${fmt(tt.load_concurrent)}</td><td>${fmt(tt.mac)}</td></tr></tbody>`;
+  document.getElementById("ops").innerHTML = h;
+  document.getElementById("opsnote").textContent =
+    "Cycles from reset release. accept: request handshake; first/last in: its rows at the Mesh input; first/last out: its rows leaving as responses; " +
+    "result rows: responses carrying its tag (its matmul's result). PE-cycles per state are the PE-cycles its rows occupied. Command: " + M.command;
+}
+
+// ---------------------------------------------------------------- navigation
+const scrub = document.getElementById("scrub");
+scrub.max = String(T - 1);
+function go(t) {
+  cur = Math.max(0, Math.min(T - 1, t));
+  scrub.value = String(cur);
+  document.getElementById("cyc").textContent = `cycle ${cur} / ${T - 1}`;
+  drawGrid(); drawCounters(); drawDetail(); drawTimeline();
+}
+function play() {
+  if (timer) { clearInterval(timer); timer = null; document.getElementById("play").innerHTML = "&#x25B6; play"; return; }
+  if (cur >= T - 1) go(0);
+  document.getElementById("play").innerHTML = "&#x23F8; pause";
+  timer = setInterval(() => { if (cur >= T - 1) play(); else go(cur + 1); }, 1000 / +document.getElementById("speed").value);
+}
+scrub.addEventListener("input", () => go(+scrub.value));
+document.getElementById("first").onclick = () => go(0);
+document.getElementById("last").onclick = () => go(T - 1);
+document.getElementById("prev").onclick = () => go(cur - 1);
+document.getElementById("next").onclick = () => go(cur + 1);
+document.getElementById("play").onclick = play;
+document.getElementById("speed").onchange = () => { if (timer) { play(); play(); } };
+function toggleTheme() {
+  const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  r.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("systolique-array-view-theme", r.dataset.theme); } catch (e) { /* storage unavailable */ }
+  drawTimeline();
+}
+try { const th = localStorage.getItem("systolique-array-view-theme"); if (th) document.documentElement.dataset.theme = th; } catch (e) { /* storage unavailable */ }
+document.getElementById("theme").onclick = toggleTheme;
+grid.addEventListener("mouseover", ev => { const c = ev.target.closest(".cell"); if (c) { hov = +c.dataset.p; drawDetail(); } });
+grid.addEventListener("mouseleave", () => { hov = -1; drawDetail(); });
+grid.addEventListener("click", ev => { const c = ev.target.closest(".cell"); if (c) { sel = +c.dataset.p === sel ? -1 : +c.dataset.p; drawGrid(); drawDetail(); } });
+document.addEventListener("keydown", ev => {
+  if (ev.target.tagName === "SELECT") return;
+  const n = ev.shiftKey ? 10 : 1;
+  if (ev.key === "ArrowRight") go(cur + n);
+  else if (ev.key === "ArrowLeft") go(cur - n);
+  else if (ev.key === "Home") go(0);
+  else if (ev.key === "End") go(T - 1);
+  else if (ev.key === " ") play();
+  else if (ev.key === "t" || ev.key === "T") toggleTheme();
+  else if (ev.key === "Escape") { sel = -1; drawGrid(); drawDetail(); }
+  else return;
+  ev.preventDefault();
+});
+window.addEventListener("resize", drawTimeline);
+// Start at the first cycle with every PE busy, or the first busy cycle; a link may say where:
+// #c=<cycle>&pe=<row>,<col>&theme=<light|dark>.
+let start = 0;
+for (let t = 0; t < T; ++t) if (PC[0][t] === 0) { start = t; break; }
+if (!start) for (let t = 0; t < T; ++t) if (PC[0][t] < PES) { start = t; break; }
+const H = new URLSearchParams(location.hash.slice(1));
+if (H.has("c")) start = +H.get("c") || 0;
+if (H.has("pe")) { const [r, c] = H.get("pe").split(",").map(Number); if (r >= 0 && r < DIM && c >= 0 && c < COLS) sel = r * COLS + c; }
+if (H.get("theme") === "light" || H.get("theme") === "dark") document.documentElement.dataset.theme = H.get("theme");
+go(start);
+})();
+</script>
+</body>
+</html>

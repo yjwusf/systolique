@@ -96,3 +96,20 @@ systolique_test_program(vcd_test)
 add_test(NAME systolique_vcd COMMAND vcd_test --ref-dir ${SYSTOLIQUE_REF_DIR}
          --out ${CMAKE_CURRENT_BINARY_DIR}/vcd_out)
 set_tests_properties(systolique_vcd PROPERTIES LABELS vcd PASS_REGULAR_EXPRESSION "VCD ok")
+
+# ---------------------------------------------------------------- tools: dump + HTML viewer
+add_executable(systolique_dump tools/array_dump.cpp)
+target_link_libraries(systolique_dump PRIVATE systolique_bench)
+target_compile_options(systolique_dump PRIVATE ${SYSTOLIQUE_WARNINGS})
+
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_FOUND)
+  # The viewer pages are well formed, offline and consistent; the committed examples are what
+  # their commands generate.
+  add_test(NAME systolique_view
+           COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/array_view.py --selftest
+                   --dump $<TARGET_FILE:systolique_dump> --out ${CMAKE_CURRENT_BINARY_DIR}/view_test)
+  set_tests_properties(systolique_view PROPERTIES LABELS view PASS_REGULAR_EXPRESSION "VIEW_SELFTEST ok")
+else()
+  message(WARNING "systolique: no Python 3; skipping the viewer tests")
+endif()

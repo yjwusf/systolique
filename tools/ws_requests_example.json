@@ -1,0 +1,14 @@
+{
+  "config": "dim4",
+  "seed": 7,
+  "requests": [
+    {"dataflow": "WS", "propagate": 1, "a": "zero", "b": "zero", "d": "random", "tag": 0,
+     "label": "preload W0"},
+    {"dataflow": "WS", "propagate": 1, "a": "random", "b": "random", "d": "random", "tag": 1,
+     "label": "compute A0 W0, preload W1"},
+    {"dataflow": "WS", "propagate": 1, "a": "random", "b": "zero", "d": "random", "tag": 2,
+     "label": "compute A1 W1 after 3 idle cycles, preload W2", "delay": 3},
+    {"dataflow": "WS", "propagate": 1, "a": "random", "b": "zero", "d": "zero", "tag": 3,
+     "label": "compute A2 W2"}
+  ]
+}
