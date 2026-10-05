@@ -6,6 +6,15 @@
 //   systolique_dump --config <c> --scenario <ws_single|ws_stream|os_single|os_stream>
 //                   [--tiles K] [--seed S] [--bubble p] --out <file.json>
 //   systolique_dump [--config <c>] --requests <requests.json> --out <file.json>
+//   systolique_dump --matmul MxKxN[:WS|:OS]... [--bias] [--relu] [--full-c] [--seed S]
+//                   [--dma-latency L] [--dma-bytes B] --out <file.json>
+//
+// --matmul runs an Engine (include/systolique/engine.h) on Gemmini's default 16x16 configuration:
+// each matmul (one operation each, in order, WS unless :OS) as gemmini.h issues it, through the command path, the ExecuteController, the banks
+// and the array (cycle-exact against the RTL), with the modelled DMA (DmaParams, unvalidated).
+// The JSON then also has the micro-ops ("uops": every command, request and flush micro-op with its
+// cycles; per-row micro-ops are counted in their command), the operations ("ops") and, per
+// request, its operation and micro-ops (op, uop: whose PE-cycles; load_op, load_uop: whose D).
 //
 // Scenarios (bench/reference.h): ws_* = ws_case, os_* = os_case (single: K = 1, stream: K =
 // --tiles, default 4), random int operands from --seed. A request file (JSON, tools/json.h) is
@@ -29,6 +38,7 @@
 #include "run.h"
 #include "stimulus.h"
 
+#include "systolique/engine.h"
 #include "systolique/systolic_array.h"
 
 #include <array>
@@ -171,6 +181,9 @@ Scenario builtin(const ArrayConfig &cfg, const std::string &name, unsigned K, ui
 
 int main(int argc, char **argv) {
   std::string config, scenario, requests, out;
+  std::vector<std::string> matmuls;
+  bool bias = false, relu = false, full_c = false;
+  DmaParams dma;
   unsigned K = 4;
   uint64_t seed = 1;
   double bubble = 0;
@@ -195,6 +208,12 @@ int main(int argc, char **argv) {
     else if (a == "--seed") seed = std::stoull(next());
     else if (a == "--bubble") bubble = std::stod(next());
     else if (a == "--out") out = next();
+    else if (a == "--matmul") matmuls.push_back(next());
+    else if (a == "--bias") bias = true;
+    else if (a == "--relu") relu = true;
+    else if (a == "--full-c") full_c = true;
+    else if (a == "--dma-latency") dma.latency = unsigned(std::stoul(next()));
+    else if (a == "--dma-bytes") dma.bytes_per_cycle = unsigned(std::stoul(next()));
     else {
       std::fprintf(stderr, "usage: %s --config c --scenario ws_single|ws_stream|os_single|"
                            "os_stream [--tiles K] [--seed S] [--bubble p] --out f.json\n"
@@ -203,13 +222,32 @@ int main(int argc, char **argv) {
       return 2;
     }
   }
-  if (out.empty() || (scenario.empty() == requests.empty())) {
-    std::fprintf(stderr, "need --out and one of --scenario / --requests\n");
+  if (out.empty() || int(!scenario.empty()) + int(!requests.empty()) + int(!matmuls.empty()) != 1) {
+    std::fprintf(stderr, "need --out and one of --scenario / --requests / --matmul\n");
     return 2;
   }
   Scenario sc;
+  std::vector<Matmul> mms;
   try {
-    if (!requests.empty()) {
+    if (!matmuls.empty()) {
+      for (const std::string &spec : matmuls) {
+        Matmul mm;
+        char df[8] = "WS";
+        const int n = std::sscanf(spec.c_str(), "%ux%ux%u:%2s", &mm.M, &mm.K, &mm.N, df);
+        if (n < 3 || (std::string(df) != "WS" && std::string(df) != "OS"))
+          throw std::runtime_error("--matmul MxKxN[:WS|:OS]");
+        mm.dataflow = std::string(df) == "WS" ? kWS : kOS;
+        mm.bias = bias;
+        mm.full_c = full_c;
+        mm.act = relu ? ACT_RELU : ACT_NONE;
+        mm.seed = uint32_t(seed + mms.size());
+        mms.push_back(mm);
+        sc.name += (sc.name.empty() ? "matmul " : ", matmul ") + std::to_string(mm.M) + "x" +
+                   std::to_string(mm.K) + "x" + std::to_string(mm.N) + " " + df;
+      }
+      config = "default";
+      sc.name += std::string(bias ? " bias" : "") + (relu ? " relu" : "") + (full_c ? " full_c" : "");
+    } else if (!requests.empty()) {
       sc = from_file(requests, config);
     } else {
       if (config.empty()) config = "dim4";
@@ -228,9 +266,6 @@ int main(int argc, char **argv) {
   const unsigned dim = cfg.rows(), cols = cfg.cols(), pes = dim * cols;
   if (pes > 64 * 64) return 2;
 
-  // Notes go with the request offered in a cycle: the k-th request the driver offers.
-  SystolicArray array(cfg);
-  MwdDriver drv(cfg, sc.ops, DriverOptions{bubble, 0, seed});
   std::vector<std::string> frames;
   std::vector<std::string> prev(pes);
   std::vector<std::vector<std::vector<int64_t>>> events(pes);
@@ -238,9 +273,7 @@ int main(int argc, char **argv) {
       last_loaded(pes, {-2, -2});
   std::map<std::pair<int64_t, unsigned>, unsigned> src_index;  // (d row, lane) -> source
   std::vector<RegSource> sources;
-  ArrayRun run = run_stimulus(
-      array, Top::MeshWithDelays, drv, 4, 1000000,
-      [&](const SystolicArray &a) {
+  auto capture = [&](const SystolicArray &a) {
         std::string full, delta;
         for (unsigned p = 0; p < pes; ++p) {
           const PeView v = a.pe(p / cols, p % cols);
@@ -274,17 +307,44 @@ int main(int argc, char **argv) {
           }
         }
         frames.push_back(delta.size() < full.size() ? "d" + delta : "f" + full);
-      },
-      [&](const MwdIn &in) -> const RequestNote * {
-        // The driver offers ops in order; the note of the op on offer this cycle.
-        if (!in.req_valid) return nullptr;
-        const size_t k = array.requests().size();
-        return k < sc.notes.size() ? &sc.notes[k] : nullptr;
-      });
-  if (!run.ok) {
-    std::fprintf(stderr, "run failed: %s\n", run.error.c_str());
-    return 1;
+      };
+  std::unique_ptr<Engine> engine;
+  std::unique_ptr<SystolicArray> own;
+  if (!mms.empty()) {
+    EngineOptions eo;
+    eo.dma = dma;
+    engine = std::make_unique<Engine>(eo);
+    for (const Matmul &mm : mms) engine->submit(mm);
+    engine->set_hook([&](const Engine &e, const CtrlTopIn &, const CtrlTopOut &) { capture(e.array()); });
+    try {
+      engine->run();
+    } catch (const std::exception &e) {
+      std::fprintf(stderr, "run failed: %s\n", e.what());
+      return 1;
+    }
+    if (const std::string e = engine->check(); !e.empty()) {
+      std::fprintf(stderr, "micro-op attribution: %s\n", e.c_str());
+      return 1;
+    }
+  } else {
+    // Notes go with the request offered in a cycle: the k-th request the driver offers.
+    own = std::make_unique<SystolicArray>(cfg);
+    SystolicArray &array = *own;
+    MwdDriver drv(cfg, sc.ops, DriverOptions{bubble, 0, seed});
+    ArrayRun run = run_stimulus(
+        array, Top::MeshWithDelays, drv, 4, 1000000, capture,
+        [&](const MwdIn &in) -> const RequestNote * {
+          // The driver offers ops in order; the note of the op on offer this cycle.
+          if (!in.req_valid) return nullptr;
+          const size_t k = array.requests().size();
+          return k < sc.notes.size() ? &sc.notes[k] : nullptr;
+        });
+    if (!run.ok) {
+      std::fprintf(stderr, "run failed: %s\n", run.error.c_str());
+      return 1;
+    }
   }
+  const SystolicArray &array = engine ? engine->array() : *own;
   const Accounting acc = array.accounting();
   if (const std::string e = SystolicArray::check(acc); !e.empty()) {
     std::fprintf(stderr, "accounting: %s\n", e.c_str());
@@ -301,7 +361,10 @@ int main(int argc, char **argv) {
     << ",\"busy_begin\":" << acc.busy_begin << ",\"busy_end\":" << acc.busy_end
     << ",\"states\":[";
   for (unsigned k = 0; k < kPeStates; ++k) f << (k ? "," : "") << jstr(to_string(PeState(k)));
-  f << "],\"rule\":\"1 PE = 1 MAC per cycle\"},\n";
+  f << "],\"rule\":\"1 PE = 1 MAC per cycle\",\"engine\":" << (engine ? "true" : "false");
+  if (engine)
+    f << ",\"dma_latency\":" << dma.latency << ",\"dma_bytes_per_cycle\":" << dma.bytes_per_cycle;
+  f << "},\n";
   f << "\"totals\":{\"run\":" << counts_json(acc.total) << ",\"busy\":" << counts_json(acc.busy)
     << ",\"occupancy\":" << acc.occupancy << ",\"utilisation\":" << acc.utilisation
     << ",\"busy_occupancy\":" << acc.busy_occupancy << ",\"busy_utilisation\":"
@@ -318,7 +381,8 @@ int main(int argc, char **argv) {
       << ",\"rows_in\":" << r.rows_in << ",\"rows_out\":" << r.rows_out
       << ",\"result_rows\":" << r.result_rows << ",\"computes\":" << r.computes
       << ",\"preloads\":" << r.preloads << ",\"state\":" << jstr(to_string(r.state()))
-      << ",\"pe_cycles\":" << counts_json(acc.per_request[r.index])
+      << ",\"op\":" << r.op << ",\"uop\":" << r.uop << ",\"load_op\":" << r.load_op
+      << ",\"load_uop\":" << r.load_uop << ",\"pe_cycles\":" << counts_json(acc.per_request[r.index])
       << ",\"macs\":" << acc.per_request[r.index].macs() << "}";
   }
   f << "],\n\"per_cycle\":[";
@@ -347,7 +411,40 @@ int main(int argc, char **argv) {
       << "," << s.d_row << "," << s.lane << "," << s.transposed << ","
       << array.d_rows()[size_t(s.d_row)].cycle << "," << s.row << "]";
   }
-  f << "],\n\"frames\":[";
+  f << "]";
+  if (engine) {
+    // uops: [id, kind, op, parent, funct, request, sent, issued, started, accept, first_in, last_in,
+    //        first_out, last_out, result_first, result_last, wb_done, completed, reads, wb_rows,
+    //        pass kind (Request / Flush: 0 preload, 1 compute+preload, 2 compute, 3 flush; else -1),
+    //        compute uop, preload uop, rows_in]
+    f << ",\n\"uop_kinds\":[";
+    for (unsigned k = 0; k <= unsigned(UopKind::DmaRow); ++k) f << (k ? "," : "") << jstr(to_string(UopKind(k)));
+    f << "],\n\"uops\":[";
+    bool first = true;
+    for (const MicroOp &u : engine->micro_ops().all()) {
+      if (u.kind == UopKind::OperandRead || u.kind == UopKind::ResultRow || u.kind == UopKind::DmaRow) continue;
+      const bool pass = u.kind == UopKind::Request || u.kind == UopKind::Flush;
+      f << (first ? "" : ",\n") << "[" << u.id << "," << unsigned(u.kind) << "," << u.op << "," << u.parent << ","
+        << u.funct << "," << u.request << "," << u.sent << "," << u.issued << "," << u.started << ","
+        << u.accept << "," << u.first_in << "," << u.last_in << "," << u.first_out << "," << u.last_out << ","
+        << u.result_first << "," << u.result_last << "," << u.wb_done << "," << u.completed << "," << u.reads
+        << "," << u.wb_rows << "," << (pass ? int(u.pass_kind) : -1) << "," << u.compute_uop << ","
+        << u.preload_uop << "," << u.rows_in << "]";
+      first = false;
+    }
+    // ops: [id, label, first_sent, last_sent, end, workload MACs, MAC PE-cycles, micro-ops]
+    f << "],\n\"ops\":[";
+    for (const Operation &o : engine->micro_ops().ops()) {
+      const auto it = acc.per_op.find(o.id);
+      uint64_t n = 0;
+      for (const MicroOp &u : engine->micro_ops().all()) n += u.op == o.id;
+      f << (o.id ? ",\n" : "") << "[" << o.id << "," << jstr(o.label) << "," << o.first_sent << "," << o.last_sent
+        << "," << o.end << "," << o.workload_macs << "," << (it == acc.per_op.end() ? 0 : it->second.macs()) << ","
+        << n << "]";
+    }
+    f << "]";
+  }
+  f << ",\n\"frames\":[";
   for (size_t t = 0; t < frames.size(); ++t) f << (t ? "," : "") << jstr(frames[t]);
   f << "],\n\"events\":[";
   for (unsigned p = 0; p < pes; ++p) {

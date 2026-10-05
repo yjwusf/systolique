@@ -8,7 +8,12 @@ of the cycle, a scrubber, counters, a timeline and the ops table.
 
   tools/array_view.py --build build --config dim4 --scenario ws_stream --tiles 3 --out page.html
   tools/array_view.py --build build --requests tools/ws_requests_example.json --out page.html
+  tools/array_view.py --build build --matmul 32x32x32:WS --matmul 16x32x32:WS --out page.html
   tools/array_view.py --json run.json --out page.html     (JSON from systolique_dump)
+
+--matmul (repeatable; --bias, --relu, --full-c, --dma-latency, --dma-bytes) runs an Engine: the
+page then also shows the micro-ops by operation (a Gantt), the micro-ops in flight, the
+operations, and colours PEs by (operation, micro-op).
   tools/array_view.py --check page.html [--expect-config c --expect-cycles n ...]
   tools/array_view.py --selftest --dump <systolique_dump> --out <dir>
 
@@ -37,6 +42,7 @@ TEMPLATE = os.path.join(HERE, "array_view.html")
 EXAMPLES = {
     "array_ws_dim4.html": ["--config", "dim4", "--scenario", "ws_stream", "--tiles", "3"],
     "array_ws_dim16.html": ["--config", "default", "--scenario", "ws_stream", "--tiles", "4"],
+    "engine_ws_two_matmuls.html": ["--matmul", "32x16x32:WS", "--matmul", "16x32x16:WS"],
 }
 PLACEHOLDER = "/*DATA*/"
 VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source",
@@ -119,6 +125,14 @@ def check(path, expect):
                 errs.append(f"cycle {t}: concurrent flags outside MAC PE-cycles")
                 break
     macs = sum(r["macs"] for r in d["requests"])
+    if m.get("engine"):
+        if sum(o[6] for o in d["ops"]) != macs:
+            errs.append("per-operation MACs do not sum to the total")
+        ids = {u[0] for u in d["uops"]}
+        for r in d["requests"]:
+            if r["uop"] not in ids:
+                errs.append(f"request {r['index']} names micro-op {r['uop']}, not in the table")
+                break
     if macs != d["totals"]["run"]["mac"] or macs != sum(pc[1]):
         errs.append("per-request MACs do not sum to the total")
     for p, pe in enumerate(d["per_pe"]):
@@ -184,6 +198,12 @@ def main():
     ap.add_argument("--seed", type=int)
     ap.add_argument("--bubble", type=float)
     ap.add_argument("--requests", help="request list (JSON), see tools/array_dump.cpp")
+    ap.add_argument("--matmul", action="append", help="MxKxN[:WS|:OS], an Engine run (repeatable)")
+    ap.add_argument("--bias", action="store_true")
+    ap.add_argument("--relu", action="store_true")
+    ap.add_argument("--full-c", action="store_true")
+    ap.add_argument("--dma-latency", type=int)
+    ap.add_argument("--dma-bytes", type=int)
     ap.add_argument("--json", help="use this systolique_dump output instead of running it")
     ap.add_argument("--out", help="HTML file to write")
     ap.add_argument("--check", help="check this page instead")
@@ -207,10 +227,15 @@ def main():
     else:
         dump = a.dump or os.path.join(a.build, "systolique_dump")
         cmd = [dump]
-        for k in ("config", "scenario", "tiles", "seed", "bubble", "requests"):
+        for k in ("config", "scenario", "tiles", "seed", "bubble", "requests", "dma_latency", "dma_bytes"):
             v = getattr(a, k)
             if v is not None:
-                cmd += ["--" + k, str(v)]
+                cmd += ["--" + k.replace("_", "-"), str(v)]
+        for mm in a.matmul or []:
+            cmd += ["--matmul", mm]
+        for k in ("bias", "relu", "full_c"):
+            if getattr(a, k):
+                cmd.append("--" + k.replace("_", "-"))
         with tempfile.TemporaryDirectory() as tmp:
             out = os.path.join(tmp, "run.json")
             r = subprocess.run(cmd + ["--out", out], capture_output=True, text=True)

@@ -91,6 +91,7 @@ kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--line); 
     <input id="scrub" type="range" min="0" value="0" aria-label="cycle">
     <span class="cyc mono" id="cyc"></span>
     <select id="speed" aria-label="playback speed"><option value="2">2 cycles/s</option><option value="6" selected>6 cycles/s</option><option value="15">15 cycles/s</option><option value="40">40 cycles/s</option></select>
+    <select id="colorby" aria-label="colour PEs by" hidden><option value="w" selected>colour: weight / D source (preload micro-op)</option><option value="u">colour: micro-op of the row</option><option value="o">colour: operation of the row</option></select>
     <button id="theme" title="light / dark (T)">theme</button>
   </div>
   <div class="layout">
@@ -101,15 +102,18 @@ kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--line); 
       <p class="note" id="gridnote"></p>
     </section>
     <section class="panel"><h2>PEs per state over the run <span class="axis">(click to jump to a cycle)</span></h2><canvas id="timeline" height="150" aria-label="PEs per state per cycle"></canvas><div class="legend-states" id="tlegend" style="margin-top:6px"></div></section>
+    <section class="panel" id="ganttp" hidden><h2>Micro-ops by operation <span class="axis">(one row per command micro-op; click to jump to its start)</span></h2><div id="ganttwrap" style="max-height:560px;overflow-y:auto"><canvas id="gantt" aria-label="micro-ops over the run"></canvas></div><p class="note" id="ganttnote"></p></section>
     </div>
     <div style="display:grid;gap:16px">
       <section class="panel"><h2>This cycle</h2><div id="counters"></div></section>
+      <section class="panel" id="inflightp" hidden><h2>Micro-ops in flight</h2><div id="inflight" class="note"></div></section>
       <section class="panel"><h2>PE detail <span class="axis">(hover or click a PE)</span></h2><div id="detail" class="note">No PE selected.</div></section>
     </div>
   </div>
   <div class="row2">
     <section class="panel"><h2>States and marks</h2><div class="legend-states" id="slegend"></div><p class="note" id="rule"></p></section>
-    <section class="panel"><h2>Requests (ops)</h2><div class="tablewrap"><table id="ops"></table></div><p class="note" id="opsnote"></p></section>
+    <section class="panel" id="operp" hidden><h2>Operations</h2><div class="tablewrap"><table id="opers"></table></div><p class="note" id="opersnote"></p></section>
+    <section class="panel"><h2 id="opstitle">Requests (ops)</h2><div class="tablewrap"><table id="ops"></table></div><p class="note" id="opsnote"></p></section>
   </div>
 </main>
 <div id="tip"></div>
@@ -168,10 +172,50 @@ const opName = q => {
 };
 const mat = q => { const r = D.requests[q]; return r && r.dataflow === "OS" ? "D" : "W"; };
 
+// ---------------------------------------------------------------- micro-ops (Engine runs)
+// D.uops: [id, kind, op, parent, funct, request, sent, issued, started, accept, first_in, last_in,
+// first_out, last_out, result_first, result_last, wb_done, completed, reads, wb_rows, pass,
+// compute uop, preload uop, rows_in] (tools/array_dump.cpp); D.ops: [id, label, first_sent,
+// last_sent, end, workload MACs, MAC PE-cycles, micro-ops].
+const ENG = !!M.engine;
+const U = new Map(), RANK = new Map(), OPS = ENG ? D.ops : [];
+const PASS = ["preload", "compute+preload", "compute", "flush"];
+if (ENG) {
+  const F = ["id", "kind", "op", "parent", "funct", "request", "sent", "issued", "started", "accept", "first_in", "last_in",
+    "first_out", "last_out", "result_first", "result_last", "wb_done", "completed", "reads", "wb_rows", "pass", "compute", "preload", "rows_in"];
+  const per = new Map();
+  D.uops.forEach(a => {
+    const u = {}; F.forEach((f, i) => { u[f] = a[i]; }); u.kind = D.uop_kinds[u.kind];
+    U.set(u.id, u);
+    if (u.kind !== "request") { const n = per.get(u.op) || 0; RANK.set(u.id, n); per.set(u.op, n + 1); }
+  });
+}
+const PASSOF = new Map();  // request index -> the pass its Request / Flush micro-op made
+U.forEach(u => { if ((u.kind === "request" || u.kind === "flush") && u.request >= 0) PASSOF.set(u.request, u.pass); });
+const modOp = o => ((o % 8) + 8) % 8;
+// An operation has a colour; its micro-ops are shades of it (100 / 70 / 45 % of the colour).
+function uopColor(id) {
+  const u = U.get(id);
+  if (!u) return null;
+  return `color-mix(in srgb, var(--op${modOp(u.op)}) ${[100, 70, 45][(RANK.get(id) || 0) % 3]}%, var(--bg))`;
+}
+const operColor = o => o >= 0 ? `var(--op${modOp(o)})` : null;
+const uopName = id => { const u = U.get(id); return u ? `${u.kind} #${id}` : "none"; };
+const operName = o => o >= 0 && OPS[o] ? `op ${o} (${OPS[o][1]})` : "none";
+let colorBy = "w";
+// Colour of a register's source request q (the weight / D it holds) and of the row of request q.
+function srcColor(q) { return q < 0 ? null : ENG ? uopColor(D.requests[q].load_uop) || opColor(q) : opColor(q); }
+function rowColor(q) {
+  if (q < 0) return null;
+  const r = D.requests[q];
+  return colorBy === "u" ? uopColor(r.uop) : operColor(r.op);
+}
+
 // ---------------------------------------------------------------- header
 document.getElementById("sub").textContent =
   `config ${M.config}: ${DIM}x${COLS} PEs (${M.tile_rows}x${M.tile_cols} per tile, tile_latency ${M.tile_latency}, output_delay ${M.output_delay}), ${M.array_dataflow} array, ` +
-  `int${M.in_bits} in / int${M.out_bits} out. Scenario ${M.scenario}, ${T} cycles from reset release, ${D.requests.length} requests.`;
+  `int${M.in_bits} in / int${M.out_bits} out. Scenario ${M.scenario}, ${T} cycles from reset release, ${D.requests.length} requests.` +
+  (ENG ? ` Engine run: the command path, ExecuteController, banks and array are cycle-exact against the RTL; the DMA is a model (latency ${M.dma_latency} cycles, ${M.dma_bytes_per_cycle} bytes per cycle, unvalidated). ${OPS.length} operations, ${U.size} command / request micro-ops.` : "");
 document.getElementById("rule").innerHTML =
   `<b>1 PE = 1 MAC per cycle.</b> Every PE-cycle is one MAC slot (peak ${PES} MACs per cycle) and has exactly one state; ` +
   `useful MACs = PE-cycles in MAC. A weight (WS) or D (OS) shifting into the shadow register in the same cycle as a MAC ` +
@@ -207,9 +251,10 @@ function drawGrid() {
     const o = cur * PES + p, c = cells[p], a = act[o];
     const ra = reg(p, a, cur), rs = reg(p, 1 - a, cur);
     const qa = ra && ra.src ? ra.src[0] : -1, qs = rs && rs.src ? rs.src[0] : -1;
-    c.d.style.background = qa >= 0 ? opColor(qa) : "";
-    c.d.classList.toggle("nosrc", qa < 0);
-    c.inner.style.background = qs >= 0 ? opColor(qs) : "";
+    const bg = colorBy === "w" ? srcColor(qa) : rowColor(rq[o]);
+    c.d.style.background = bg || "";
+    c.d.classList.toggle("nosrc", !bg);
+    c.inner.style.background = qs >= 0 ? srcColor(qs) : "";
     c.inner.classList.toggle("nosrc", qs < 0);
     const s = STATES[st[o]];
     c.d.classList.toggle("idle", st[o] === 0);
@@ -259,7 +304,8 @@ function regHtml(p, k, t, isActive) {
   h += `<span class="k">value</span><span class="mono">${r.value}</span>`;
   if (r.src) {
     const s = r.src, q = s[0], R = D.requests[q];
-    h += `<span class="k">op</span><span><span class="sw" style="background:${opColor(q)}"></span> ${opName(q)}${R && R.label ? " " + R.label : ""}</span>`;
+    h += `<span class="k">${ENG ? "request" : "op"}</span><span><span class="sw" style="background:${opColor(q)}"></span> ${opName(q)}${R && R.label ? " " + R.label : ""}</span>`;
+    if (ENG && R) h += `<span class="k">from</span><span><span class="sw" style="background:${uopColor(R.load_uop) || ""}"></span> ${uopName(R.load_uop)} of ${operName(R.load_op)}</span>`;
     if (s[1] >= 0) h += `<span class="k">element</span><span class="mono">${mat(q)}${q}[${s[1]}][${s[2]}]${s[6] ? " (through the transposer)" : ""}</span>`;
     h += `<span class="k">d input</span><span class="mono">row ${s[8]} of #${q}, lane ${s[5]}: handshake ${s[4]} at cycle ${s[7]}, value ${s[3]}</span>`;
   } else {
@@ -278,7 +324,8 @@ function drawDetail() {
   const t = cur, o = t * PES + p, r = Math.floor(p / COLS), c = p % COLS, q = rq[o];
   let h = `<div class="kv"><span class="k">PE</span><span>row ${r}, column ${c}</span>` +
     `<span class="k">cycle ${t}</span><span><b>${NAMES[STATES[st[o]]]}</b>${fl[o] & 1 ? ", concurrent load" : ""}${fl[o] & 2 ? ", concurrent drain" : ""}</span>` +
-    `<span class="k">row of</span><span>${q >= 0 ? opName(q) : "no row (in_valid low)"}</span></div>`;
+    `<span class="k">row of</span><span>${q >= 0 ? opName(q) : "no row (in_valid low)"}</span>` +
+    (ENG && q >= 0 ? `<span class="k">micro-op</span><span><span class="sw" style="background:${uopColor(D.requests[q].uop) || ""}"></span> ${uopName(D.requests[q].uop)} of ${operName(D.requests[q].op)}</span>` : "") + "</div>";
   h += regHtml(p, act[o], t, true) + regHtml(p, 1 - act[o], t, false);
   const so = [0, 0, 0, 0, 0];
   for (let k = 0; k <= t; ++k) so[st[k * PES + p]]++;
@@ -340,20 +387,119 @@ document.getElementById("slegend").innerHTML =
 // ---------------------------------------------------------------- ops table
 {
   const cyc = v => v >= 0 ? v : "-";
-  let h = '<thead><tr><th class="l">op</th><th class="l">what</th><th>df</th><th>tag</th><th>accept</th><th>first in</th><th>last in</th><th>first out</th><th>last out</th><th>result rows</th>' +
+  let h = '<thead><tr><th class="l">op</th><th class="l">what</th>' + (ENG ? '<th class="l">micro-op (operation)</th>' : "") + '<th>df</th><th>tag</th><th>accept</th><th>first in</th><th>last in</th><th>first out</th><th>last out</th><th>result rows</th>' +
     "<th>MAC</th><th>load</th><th>drain</th><th>bubble</th><th>conc. load</th><th>MACs</th></tr></thead><tbody>";
   D.requests.forEach(r => {
     const pc = r.pe_cycles;
-    h += `<tr><td class="l"><span class="sw" style="background:${opColor(r.index)}"></span> #${r.index}</td><td class="l">${r.label || (r.flush ? "flush" : "")}</td>` +
+    const what = ENG ? (PASSOF.has(r.index) ? PASS[PASSOF.get(r.index)] : "") : (r.label || (r.flush ? "flush" : ""));
+    h += `<tr><td class="l"><span class="sw" style="background:${opColor(r.index)}"></span> #${r.index}</td><td class="l">${what}</td>` +
+      (ENG ? `<td class="l"><span class="sw" style="background:${uopColor(r.uop) || ""}"></span> ${uopName(r.uop)} (op ${r.op})${r.load_uop >= 0 && r.load_uop !== r.uop ? ", D of " + uopName(r.load_uop) : ""}</td>` : "") +
       `<td>${r.dataflow}</td><td>${r.tag_valid ? r.tag : "-"}</td><td>${cyc(r.accept)}</td><td>${cyc(r.first_in)}</td><td>${cyc(r.last_in)}</td><td>${cyc(r.first_out)}</td><td>${cyc(r.last_out)}</td>` +
       `<td>${r.result_first >= 0 ? r.result_first + "-" + r.result_last : "-"}</td><td>${fmt(pc.mac)}</td><td>${fmt(pc.load)}</td><td>${fmt(pc.drain)}</td><td>${fmt(pc.bubble)}</td><td>${fmt(pc.load_concurrent)}</td><td>${fmt(r.macs)}</td></tr>`;
   });
   const tt = D.totals.run;
-  h += `<tr><td class="l"><b>total</b></td><td class="l"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>${fmt(tt.mac)}</td><td>${fmt(tt.load)}</td><td>${fmt(tt.drain)}</td><td>${fmt(tt.bubble)}</td><td>${fmt(tt.load_concurrent)}</td><td>${fmt(tt.mac)}</td></tr></tbody>`;
+  h += `<tr><td class="l"><b>total</b></td><td class="l"></td>${ENG ? "<td></td>" : ""}<td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td>${fmt(tt.mac)}</td><td>${fmt(tt.load)}</td><td>${fmt(tt.drain)}</td><td>${fmt(tt.bubble)}</td><td>${fmt(tt.load_concurrent)}</td><td>${fmt(tt.mac)}</td></tr></tbody>`;
   document.getElementById("ops").innerHTML = h;
   document.getElementById("opsnote").textContent =
     "Cycles from reset release. accept: request handshake; first/last in: its rows at the Mesh input; first/last out: its rows leaving as responses; " +
     "result rows: responses carrying its tag (its matmul's result). PE-cycles per state are the PE-cycles its rows occupied. Command: " + M.command;
+}
+
+// ---------------------------------------------------------------- micro-ops: Gantt, in flight, operations
+// A command micro-op's window: from its issue to the controller (or its creation) to the last
+// cycle it does anything; phases: waiting (issued .. started), operand rows into the array
+// (started .. last_in), results and write-back (.. end).
+function uopWindow(u) {
+  const begin = [u.issued, u.sent, u.started, u.accept].find(v => v >= 0);
+  const end = Math.max(u.completed, u.wb_done, u.last_out, u.result_last, u.last_in, u.started, u.accept, begin === undefined ? -1 : begin);
+  return { begin: begin === undefined ? -1 : begin, end };
+}
+const GROWS = [];
+if (ENG) {
+  OPS.forEach(o => {
+    GROWS.push({ head: o });
+    [...U.values()].filter(u => u.op === o[0] && u.kind !== "request" && uopWindow(u).begin >= 0).forEach(u => GROWS.push({ u, w: uopWindow(u) }));
+  });
+}
+const gcv = document.getElementById("gantt");
+function drawGantt() {
+  if (!ENG) return;
+  const dpr = window.devicePixelRatio || 1, RH = 9, W = gcv.parentElement.clientWidth, H = GROWS.length * RH + 20;
+  gcv.style.height = H + "px";
+  gcv.width = W * dpr; gcv.height = H * dpr;
+  const g = gcv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+  const L = 150, R = 6, pw = W - L - R, x = t => L + (t / Math.max(1, T)) * pw;
+  g.font = "10px system-ui"; g.textBaseline = "middle";
+  GROWS.forEach((r, i) => {
+    const y = 4 + i * RH;
+    if (r.head) {
+      g.fillStyle = css("--op" + modOp(r.head[0])); g.fillRect(0, y + 1, 6, RH - 2);
+      g.fillStyle = css("--ink"); g.fillText(`op ${r.head[0]} ${r.head[1]}`.slice(0, 30), 9, y + RH / 2);
+      return;
+    }
+    const u = r.u, w = r.w, inflight = w.begin <= cur && cur <= w.end;
+    g.fillStyle = css(inflight ? "--ink" : "--ink3");
+    g.fillText(`${u.kind} #${u.id}`.slice(0, 28), 12, y + RH / 2);
+    g.fillStyle = css("--line");
+    const st = u.started >= 0 ? u.started : w.begin;
+    g.fillRect(x(w.begin), y + 2, Math.max(1, x(st) - x(w.begin)), RH - 4);
+    g.globalAlpha = .6;
+    g.fillStyle = css("--op" + modOp(u.op));
+    const li = u.last_in >= 0 ? u.last_in : w.end;
+    g.fillRect(x(st), y + 1, Math.max(1, x(li + 1) - x(st)), RH - 2);
+    g.globalAlpha = 1;
+    if (w.end > li) g.fillRect(x(li + 1), y + 1, Math.max(1, x(w.end + 1) - x(li + 1)), RH - 2);
+  });
+  g.strokeStyle = css("--ink"); g.lineWidth = 1.5; g.beginPath(); g.moveTo(x(cur + .5), 0); g.lineTo(x(cur + .5), H); g.stroke();
+  gcv._g = { L, pw, RH };
+}
+if (ENG) {
+  document.getElementById("ganttp").hidden = false;
+  document.getElementById("inflightp").hidden = false;
+  document.getElementById("colorby").hidden = false;
+  document.getElementById("ganttnote").textContent =
+    "Grey: issued to its controller, waiting; light: its operand rows going into the array (from the start of its pass to its last row in; DMA: moving rows); " +
+    "dark: results leaving the array and their write-back, up to completion. Rows are grouped by operation; the line is the current cycle. " +
+    "Cycles of every micro-op (also the per-row ones: operand reads, result rows, DMA rows) are in the micro-op table of the Engine (docs/micro_ops.md).";
+  const at = ev => { const r = gcv.getBoundingClientRect(), { L, pw, RH } = gcv._g; return { t: Math.floor(((ev.clientX - r.left) - L) / pw * T), i: Math.floor((ev.clientY - r.top - 4) / RH) }; };
+  gcv.addEventListener("click", ev => { const { i } = at(ev), r = GROWS[i]; if (r && r.u) go(r.w.begin); });
+  gcv.addEventListener("mousemove", ev => {
+    const { t, i } = at(ev), r = GROWS[i];
+    if (!r || !r.u) { tip.style.display = "none"; return; }
+    const u = r.u, c = v => v >= 0 ? v : "-";
+    tip.style.display = "block"; tip.style.left = (ev.clientX + 12) + "px"; tip.style.top = (ev.clientY + 12) + "px";
+    tip.innerHTML = `<b>${u.kind} #${u.id}</b> of op ${u.op}${u.pass >= 0 ? " (" + PASS[u.pass] + ")" : ""}<br>issued ${c(u.issued)}, started ${c(u.started)}, accept ${c(u.accept)}<br>` +
+      `rows in ${c(u.first_in)}..${c(u.last_in)}, out ${c(u.first_out)}..${c(u.last_out)}<br>result rows ${c(u.result_first)}..${c(u.result_last)}, write-back done ${c(u.wb_done)}<br>` +
+      `completed ${c(u.completed)}; ${u.reads} operand rows read, ${u.wb_rows} rows written<br>cycle under the pointer: ${Math.max(0, Math.min(T - 1, t))}`;
+  });
+  gcv.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+  document.getElementById("colorby").onchange = ev => { colorBy = ev.target.value; drawGrid(); };
+  // operations table
+  let h = '<thead><tr><th class="l">operation</th><th>first command</th><th>last command</th><th>last cycle</th><th>cycles</th><th>workload MACs</th><th>MAC PE-cycles</th><th>micro-ops</th></tr></thead><tbody>';
+  OPS.forEach(o => {
+    h += `<tr><td class="l"><span class="sw" style="background:${operColor(o[0])}"></span> op ${o[0]}: ${o[1]}</td><td>${o[2]}</td><td>${o[3]}</td><td>${o[4]}</td><td>${o[4] - o[2] + 1}</td><td>${fmt(o[5])}</td><td>${fmt(o[6])}</td><td>${fmt(o[7])}</td></tr>`;
+  });
+  document.getElementById("opers").innerHTML = h + "</tbody>";
+  document.getElementById("operp").hidden = false;
+  document.getElementById("opersnote").textContent =
+    "Cycles from reset release: the core sends the operation's first and last command, and the last cycle any of its micro-ops does something. " +
+    "MAC PE-cycles: PE-cycles in state MAC attributed to the operation's compute micro-ops (1 PE = 1 MAC per cycle); for a matmul whose dimensions are multiples of " + DIM + " they equal M x N x K.";
+  document.getElementById("opstitle").textContent = "Requests (array passes)";
+}
+function drawInflight() {
+  if (!ENG) return;
+  const live = [...U.values()].filter(u => u.kind !== "request" && (w => w.begin >= 0 && w.begin <= cur && cur <= w.end)(uopWindow(u)));
+  const by = {};
+  live.forEach(u => { by[u.kind] = (by[u.kind] || 0) + 1; });
+  let h = Object.keys(by).length ? Object.entries(by).map(([k, n]) => `${n} ${k}`).join(", ") : "none";
+  h += live.slice(0, 14).map(u => {
+    const phase = u.last_in >= 0 && cur > u.last_in ? "results / write-back" : u.started >= 0 && cur >= u.started ? "rows going in" : "waiting";
+    return `<div><span class="sw" style="background:${uopColor(u.id) || ""}"></span> ${u.kind} #${u.id}, op ${u.op}: ${phase}</div>`;
+  }).join("");
+  if (live.length > 14) h += `<p class="note">and ${live.length - 14} more</p>`;
+  document.getElementById("inflight").innerHTML = h;
 }
 
 // ---------------------------------------------------------------- navigation
@@ -363,7 +509,7 @@ function go(t) {
   cur = Math.max(0, Math.min(T - 1, t));
   scrub.value = String(cur);
   document.getElementById("cyc").textContent = `cycle ${cur} / ${T - 1}`;
-  drawGrid(); drawCounters(); drawDetail(); drawTimeline();
+  drawGrid(); drawCounters(); drawDetail(); drawTimeline(); drawGantt(); drawInflight();
 }
 function play() {
   if (timer) { clearInterval(timer); timer = null; document.getElementById("play").innerHTML = "&#x25B6; play"; return; }
@@ -382,7 +528,7 @@ function toggleTheme() {
   const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
   r.dataset.theme = dark ? "light" : "dark";
   try { localStorage.setItem("systolique-array-view-theme", r.dataset.theme); } catch (e) { /* storage unavailable */ }
-  drawTimeline();
+  drawTimeline(); drawGantt();
 }
 try { const th = localStorage.getItem("systolique-array-view-theme"); if (th) document.documentElement.dataset.theme = th; } catch (e) { /* storage unavailable */ }
 document.getElementById("theme").onclick = toggleTheme;
@@ -402,7 +548,7 @@ document.addEventListener("keydown", ev => {
   else return;
   ev.preventDefault();
 });
-window.addEventListener("resize", drawTimeline);
+window.addEventListener("resize", () => { drawTimeline(); drawGantt(); });
 // Start at the first cycle with every PE busy, or the first busy cycle; a link may say where:
 // #c=<cycle>&pe=<row>,<col>&theme=<light|dark>.
 let start = 0;
