@@ -69,3 +69,15 @@ foreach(cfg ${SYSTOLIQUE_CONFIGS})
     PASS_REGULAR_EXPRESSION "TRACES config=${cfg} .* mismatches=0 missing=0 conservation_failures=0 .*provenance_failures=0"
     FAIL_REGULAR_EXPRESSION "FAIL")
 endforeach()
+
+# Conservation of the accounting and provenance against values, every cycle.
+systolique_test_program(conservation_test)
+systolique_test_program(provenance_test)
+foreach(cfg ${SYSTOLIQUE_CONFIGS})
+  add_test(NAME systolique_conservation_${cfg} COMMAND conservation_test --config ${cfg})
+  set_tests_properties(systolique_conservation_${cfg} PROPERTIES LABELS conservation
+    PASS_REGULAR_EXPRESSION "CONSERVATION config=${cfg} runs=[1-9][0-9]* errors=0")
+  add_test(NAME systolique_provenance_${cfg} COMMAND provenance_test --config ${cfg})
+  set_tests_properties(systolique_provenance_${cfg} PROPERTIES LABELS provenance
+    PASS_REGULAR_EXPRESSION "PROVENANCE config=${cfg} runs=[1-9][0-9]* checks=[1-9][0-9]* failures=0")
+endforeach()
