@@ -51,3 +51,21 @@ add_library(systolique_bench
 target_include_directories(systolique_bench PUBLIC ${PROJECT_SOURCE_DIR}/bench)
 target_link_libraries(systolique_bench PUBLIC systolique ZLIB::ZLIB)
 target_compile_options(systolique_bench PRIVATE ${SYSTOLIQUE_WARNINGS})
+
+# ---------------------------------------------------------------- tests
+function(systolique_test_program name)
+  add_executable(${name} tests/${name}.cpp)
+  target_link_libraries(${name} PRIVATE systolique_bench)
+  target_compile_options(${name} PRIVATE ${SYSTOLIQUE_WARNINGS})
+endfunction()
+
+# Every stored RTL trace: replay (every output port, every cycle), regeneration from its
+# stimulus, conservation, WS provenance, matmul results vs plain C++.
+systolique_test_program(trace_test)
+foreach(cfg ${SYSTOLIQUE_CONFIGS})
+  add_test(NAME systolique_trace_${cfg}
+           COMMAND trace_test --ref-dir ${SYSTOLIQUE_REF_DIR} --config ${cfg})
+  set_tests_properties(systolique_trace_${cfg} PROPERTIES LABELS trace
+    PASS_REGULAR_EXPRESSION "TRACES config=${cfg} .* mismatches=0 missing=0 conservation_failures=0 .*provenance_failures=0"
+    FAIL_REGULAR_EXPRESSION "FAIL")
+endforeach()
