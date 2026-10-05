@@ -1,0 +1,468 @@
+{
+ "_doc": "Reference traces of the Gemmini RTL (inputs and outputs of every cycle), made by the lockstep benches gemmini_rtl_<config> while the SystemC model matched them; written by tools/gemmini_rtl.py record.",
+ "verilator": "Verilator 5.038 2025-07-08 rev v5.038",
+ "rtl": {
+  "_doc": "Verilog of Gemmini's systolic array, elaborated by accelsim/gemmini/rtl/elaborate.sh; written by tools/gemmini_rtl.py provenance.",
+  "gemmini": {
+   "repo": "https://github.com/ucb-bar/gemmini",
+   "tag": "v0.7.2",
+   "commit": "709bc56b6dd859fc2b1a9027a96a0b5be6ad7ed6",
+   "files": [
+    "src/main/scala/gemmini/Arithmetic.scala",
+    "src/main/scala/gemmini/Dataflow.scala",
+    "src/main/scala/gemmini/Mesh.scala",
+    "src/main/scala/gemmini/MeshWithDelays.scala",
+    "src/main/scala/gemmini/PE.scala",
+    "src/main/scala/gemmini/Shifter.scala",
+    "src/main/scala/gemmini/SyncMem.scala",
+    "src/main/scala/gemmini/TagQueue.scala",
+    "src/main/scala/gemmini/Tile.scala",
+    "src/main/scala/gemmini/Transposer.scala",
+    "src/main/scala/gemmini/Util.scala"
+   ]
+  },
+  "hardfloat": {
+   "repo": "https://github.com/ucb-bar/berkeley-hardfloat",
+   "commit": "9deaf1d49f487347be371641ba6ea637b669ad21",
+   "why": "rocket-chip's hardfloat submodule at the Chipyard commit Gemmini v0.7.2 names (CHIPYARD.hash ef3409f)"
+  },
+  "chisel": "3.6.0, Scala FIRRTL compiler (chisel3.stage.ChiselStage.emitVerilog)",
+  "scala": "2.13.10",
+  "sbt": "copying runtime jar...",
+  "java": "openjdk version \"17.0.20.1\" 2026-08-18",
+  "generator": {
+   "command": "accelsim/gemmini/rtl/elaborate.sh",
+   "sources": {
+    "build.sbt": "08d5db412040c74960bccdbb130f403e2a329b073db477af98699b02b1bf29ae",
+    "project/build.properties": "38901e157e1ca1e142d978bc5254ddb83e0f6765747f5668351996fdb606000b",
+    "src/GemminiTops.scala": "cfcd97532dceb626e4fe54e1be80e7a5dc944951902954099f46f0d2bf5ebbbd"
+   }
+  },
+  "configs": {
+   "default": {
+    "in_bits": 8,
+    "out_bits": 20,
+    "acc_bits": 32,
+    "dataflow": "BOTH",
+    "tile_rows": 1,
+    "tile_cols": 1,
+    "mesh_rows": 16,
+    "mesh_cols": 16,
+    "tile_latency": 0,
+    "output_delay": 1,
+    "tag_bits": 8
+   },
+   "dim4": {
+    "in_bits": 8,
+    "out_bits": 20,
+    "acc_bits": 32,
+    "dataflow": "BOTH",
+    "tile_rows": 1,
+    "tile_cols": 1,
+    "mesh_rows": 4,
+    "mesh_cols": 4,
+    "tile_latency": 0,
+    "output_delay": 1,
+    "tag_bits": 8
+   },
+   "tiled": {
+    "in_bits": 8,
+    "out_bits": 20,
+    "acc_bits": 32,
+    "dataflow": "BOTH",
+    "tile_rows": 2,
+    "tile_cols": 2,
+    "mesh_rows": 4,
+    "mesh_cols": 4,
+    "tile_latency": 1,
+    "output_delay": 2,
+    "tag_bits": 8
+   },
+   "ws_tree": {
+    "in_bits": 8,
+    "out_bits": 20,
+    "acc_bits": 32,
+    "dataflow": "WS",
+    "tile_rows": 2,
+    "tile_cols": 2,
+    "mesh_rows": 4,
+    "mesh_cols": 4,
+    "tile_latency": 0,
+    "output_delay": 1,
+    "tag_bits": 8
+   },
+   "os16": {
+    "in_bits": 16,
+    "out_bits": 24,
+    "acc_bits": 32,
+    "dataflow": "OS",
+    "tile_rows": 1,
+    "tile_cols": 1,
+    "mesh_rows": 8,
+    "mesh_cols": 8,
+    "tile_latency": 0,
+    "output_delay": 1,
+    "tag_bits": 8
+   }
+  },
+  "verilog_digest": "sha256 of each file without its // @[...] source locators",
+  "verilog": {
+   "default/MeshTop.v": "be4db5be756d68ae88656a4ee976047a5ed031362b367ea4b86bf65e04a527f1",
+   "default/MeshWithDelaysTop.v": "b67c3ade58cfe68106fb985e85445ebefa105676a83316f96537341717d4ad43",
+   "dim4/MeshTop.v": "4e155f70a2a06dee842c46e226e8cfa1c38fe05e24202510830f99d978d06569",
+   "dim4/MeshWithDelaysTop.v": "7a335994d5a5dd7bd0b90688e174698218c139bd305bfc0b57508dcba570837f",
+   "os16/MeshTop.v": "f8ab41bf056daa166b3c3870075c855501115eece149051b9a2d0fcec81eaec1",
+   "os16/MeshWithDelaysTop.v": "054be6abe328c7cd47f37cb0458f35811aa115af03ff5b438dcf59eb5e659286",
+   "tiled/MeshTop.v": "6d63dd910a0240a4ebea4316d258e129cb4a383aba548ff4991659f1a6f8f4cf",
+   "tiled/MeshWithDelaysTop.v": "457a44d21f1499c44087f560476c303801f4a4fde55d65bc69964af70daed332",
+   "ws_tree/MeshTop.v": "c13ec12ad29051e5ad591707f80a2e4b74bf63c66fc358fe05ca776b353c1614",
+   "ws_tree/MeshWithDelaysTop.v": "2011bc36fa3b5ee71cc7dd3c00df2bdbab9b998cd6952d51e3b5ddc4b7f2deb9"
+  }
+ },
+ "traces": {
+  "default/accumulate.csv.gz": {
+   "sha256": "a594d1738e77fbb4b9915177a1e909eca4a56ac1c275c7500420435a7aa376e4",
+   "cycles": 182
+  },
+  "default/bubbles.csv.gz": {
+   "sha256": "247bdaddf5aeb230c38cbc51d45b2320bf0e33808309f0e60853321dba3048e8",
+   "cycles": 362
+  },
+  "default/df_switch.csv.gz": {
+   "sha256": "7ab3d8cec6c96ca6a4370df987cc9c104f615d2df9c18db7134e42b41ae71db2",
+   "cycles": 278
+  },
+  "default/flush2.csv.gz": {
+   "sha256": "0ee6b46ad55d6bdf89f222549795cdf4492043c7ae708f20dba236e6170e9610",
+   "cycles": 166
+  },
+  "default/mesh_random.csv.gz": {
+   "sha256": "1294cfc64adaef16187d9a2b0a99b9400882566c216f9a19e398e9bb6ab9845e",
+   "cycles": 404
+  },
+  "default/mesh_sparse.csv.gz": {
+   "sha256": "2d294993b9619ab3504ef72c74f8f34d2179deb220f6a4cc8ab28d964bb59fe5",
+   "cycles": 204
+  },
+  "default/os_a_transposer.csv.gz": {
+   "sha256": "9a70a2a5266ac5a75d3216dabff32c8f4ffc07b2188afe5084ec706077df217c",
+   "cycles": 150
+  },
+  "default/os_b_transposed.csv.gz": {
+   "sha256": "f1022d0eb18b13ea7b392629bf3093e3194db56af67c6787d7681dff66a238a9",
+   "cycles": 150
+  },
+  "default/os_back_to_back.csv.gz": {
+   "sha256": "77572c6da351da50f6f6a7a41f6ce4d10144df93024bd94f789295dfe2f45103",
+   "cycles": 166
+  },
+  "default/os_shift.csv.gz": {
+   "sha256": "e8b2279d1258c9f2a68fefe1fcdd8a822354578df9efbf1c6b5fcd3cb4f48db1",
+   "cycles": 150
+  },
+  "default/os_single.csv.gz": {
+   "sha256": "71256d18d4614eb37cda94c10eb2a60c8e652cd96fce314f9b317b92dbc7d35c",
+   "cycles": 118
+  },
+  "default/os_ws_no_flush.csv.gz": {
+   "sha256": "814df81b40180eeccfe303550b4eea8a9ec6865e5a0a71da5401fe6491b7bd20",
+   "cycles": 1116
+  },
+  "default/partial_rows.csv.gz": {
+   "sha256": "417336f7f4e758d9526e9d8ad1d58f09329a2c0df765c0b648b6595395415fca",
+   "cycles": 140
+  },
+  "default/random_1.csv.gz": {
+   "sha256": "8c47dee30e93f7773f9eb4de5bdc90f3895e6ebd2904fb0e55b5045b2c5c2eb8",
+   "cycles": 1005
+  },
+  "default/random_2.csv.gz": {
+   "sha256": "3cb523cee382c19f0239270cc04f9958bbb7ea5a8a3ba3469cbfc31ab996264b",
+   "cycles": 773
+  },
+  "default/ws_a_transposed.csv.gz": {
+   "sha256": "ab71ff77483149e801d0aec83380c50fa4afb200a0da266c833b911fd3fc3f97",
+   "cycles": 149
+  },
+  "default/ws_back_to_back.csv.gz": {
+   "sha256": "31a5c95ef0eaeafcd32ded1af8b14218000cfe3406fc196320a85988c3d199ad",
+   "cycles": 165
+  },
+  "default/ws_single.csv.gz": {
+   "sha256": "c507d57c8b281fac1dbc76abfaf572fc3f3cee62aa72b6830914e1d3d8cedd90",
+   "cycles": 117
+  },
+  "default/ws_w_transposed.csv.gz": {
+   "sha256": "244bfc873c99015ecf187fe4f40b3fc2bf15394b908cb72cfecf6b37aa040fe4",
+   "cycles": 165
+  },
+  "dim4/accumulate.csv.gz": {
+   "sha256": "d368a64e17a0f6b3f4e0e735df09e19eb18235088a9feb9ee6587fd57e2d77fb",
+   "cycles": 62
+  },
+  "dim4/bubbles.csv.gz": {
+   "sha256": "d453371b0ce18cf5198036085c131bbe0e175ac551279430da6dac61558232cd",
+   "cycles": 128
+  },
+  "dim4/df_switch.csv.gz": {
+   "sha256": "8ffe6c3e849b5f9858364e54482940a7a7f3cd6ddc1b9c0c7024e9188f95397d",
+   "cycles": 86
+  },
+  "dim4/flush2.csv.gz": {
+   "sha256": "b88cc4423be1762c12f3b29435387ef0e731694de7ef2cff8b579b8b8b55389b",
+   "cycles": 58
+  },
+  "dim4/mesh_random.csv.gz": {
+   "sha256": "0776fca83a2fbd1a12c2a1f327d51873fc2095bb2205b1dd8c6c7292fc3493c5",
+   "cycles": 1504
+  },
+  "dim4/mesh_sparse.csv.gz": {
+   "sha256": "c8af495fba6c4465b4a02ac6c056cf802ff0b0411cf10b5dcfca253d0720826d",
+   "cycles": 754
+  },
+  "dim4/os_a_transposer.csv.gz": {
+   "sha256": "fe0ac80463c832de516456d65d5016758dca44706884dfa6914da6d23185413c",
+   "cycles": 54
+  },
+  "dim4/os_b_transposed.csv.gz": {
+   "sha256": "d0aa7dcb3a9ff69cf3577175ed3590c6dc067a04ef6d413cd6de961711c0aafd",
+   "cycles": 54
+  },
+  "dim4/os_back_to_back.csv.gz": {
+   "sha256": "8a99daff87ee484f8bad51c6a452d4ac0a81d30926de553132006edf6dedaebc",
+   "cycles": 58
+  },
+  "dim4/os_shift.csv.gz": {
+   "sha256": "7397431782141ddb283fd43892efe2c963128d4560e6b46390d4be2777648e98",
+   "cycles": 54
+  },
+  "dim4/os_single.csv.gz": {
+   "sha256": "88787e91f218d98d66d69cce05262a66910844d33906e34d526c0bd117422d28",
+   "cycles": 46
+  },
+  "dim4/os_ws_no_flush.csv.gz": {
+   "sha256": "2f2d75a1c861b51fb1d971b81dc4ff4ffc21442bc3466715f307c7d7923cfd46",
+   "cycles": 432
+  },
+  "dim4/partial_rows.csv.gz": {
+   "sha256": "b2df5985a412289a9f842c9f7238166d72abe2ff066625bcf306451d078e5a7b",
+   "cycles": 56
+  },
+  "dim4/random_1.csv.gz": {
+   "sha256": "71b974f929f35bf09622be671a0a6ff26bd0c7504ffdb253a6bbab1cb1296370",
+   "cycles": 265
+  },
+  "dim4/random_2.csv.gz": {
+   "sha256": "14da5ea2c2d9f715b60e0dee06f48b55f7dbaf8c3d1e6689d51a23de849ef676",
+   "cycles": 232
+  },
+  "dim4/random_long.csv.gz": {
+   "sha256": "a4422292f2af7c590214fd45f9ae7300e8deb865ce174444363ceb0de1d836d6",
+   "cycles": 940
+  },
+  "dim4/ws_a_transposed.csv.gz": {
+   "sha256": "1d12e63a274f785bbac1123b3a179d32e0a5b1132a7b4b962c4227f82570077c",
+   "cycles": 53
+  },
+  "dim4/ws_back_to_back.csv.gz": {
+   "sha256": "badca36d15158420b10dbe3cd0a2a8f7c533e4acc561d92afc27dab5d16d5b66",
+   "cycles": 57
+  },
+  "dim4/ws_single.csv.gz": {
+   "sha256": "c6a7c979db32aea5f715cd8ca7efe204b4c6bb5a48f19a68a3141a3dfcdd320f",
+   "cycles": 45
+  },
+  "dim4/ws_w_transposed.csv.gz": {
+   "sha256": "81ca89b5c56d15fc4450c32724271034c5a188c92aadd57a883f16b2c9598b60",
+   "cycles": 57
+  },
+  "os16/accumulate.csv.gz": {
+   "sha256": "c2d310c66680f4f027116619f95aa0fe6e869ab9554050d4475472f1ff20b0a9",
+   "cycles": 102
+  },
+  "os16/bubbles.csv.gz": {
+   "sha256": "94ee111430fb7e7368a26373a29434325d1476eb1b351927cab84867607ee649",
+   "cycles": 177
+  },
+  "os16/flush2.csv.gz": {
+   "sha256": "858ec753f65d476618ddec20de7443e6ef9bb6b01e952f9ca82c167f2b032e75",
+   "cycles": 94
+  },
+  "os16/mesh_random.csv.gz": {
+   "sha256": "48f3dd19ecd314606a977ce3d59b32b24110ebaef124ec3d77450bf38fdfe012",
+   "cycles": 1504
+  },
+  "os16/mesh_sparse.csv.gz": {
+   "sha256": "f0b15e20f49d3f1cf3affaac2d9192700ebca6d5d350b3d125210bf0a622e2a9",
+   "cycles": 754
+  },
+  "os16/os_a_transposer.csv.gz": {
+   "sha256": "6a37cc8539a76da1461d18b66c9f302def5438e368aa09c85afbce6501981f34",
+   "cycles": 86
+  },
+  "os16/os_b_transposed.csv.gz": {
+   "sha256": "3c4bbd6450014126a96792ebddc5354b88182daa5042a8a8ee1089979bddb501",
+   "cycles": 86
+  },
+  "os16/os_back_to_back.csv.gz": {
+   "sha256": "5aafaa14ff560dce9263b02ce8dfafb96aaeac370e31737d82d2b37af199276d",
+   "cycles": 94
+  },
+  "os16/os_shift.csv.gz": {
+   "sha256": "029f5726840d6572f3bb945e705c422b7019ae535d9011f2776244f78d09d13f",
+   "cycles": 86
+  },
+  "os16/os_single.csv.gz": {
+   "sha256": "6a131f184ed74de16604d4f243bb79ac7d3234d5e7bbd93830f913d64c4c54bc",
+   "cycles": 70
+  },
+  "os16/partial_rows.csv.gz": {
+   "sha256": "1ef7a7d8aa201161478d2d3ac8459396e996531073d4e42b49ec714365025fc0",
+   "cycles": 84
+  },
+  "os16/random_1.csv.gz": {
+   "sha256": "47293364812fef944613840af279eca7201619c1b6919e6b468d7d900ce60934",
+   "cycles": 425
+  },
+  "os16/random_2.csv.gz": {
+   "sha256": "a44554dc55ecb060cabf85e13ce5ecbf90979f34ceb10cc8540cbf2c053bfa4f",
+   "cycles": 356
+  },
+  "os16/random_long.csv.gz": {
+   "sha256": "555e783a881dc9da25c60083100939ddc6992f2cbae891bcddfe5e54b034bb3a",
+   "cycles": 1576
+  },
+  "tiled/accumulate.csv.gz": {
+   "sha256": "46b2ffbaac450e624c56c884674a70453e046deb4f108b6ef7e59ec4d7cb9785",
+   "cycles": 135
+  },
+  "tiled/bubbles.csv.gz": {
+   "sha256": "07eca37f4d4889368654ce4840c2f6c225834e3a029c55eaf1ececd0d1e4c117",
+   "cycles": 233
+  },
+  "tiled/df_switch.csv.gz": {
+   "sha256": "24c13ea3923dc64203c16af3c89be1e7f5d71f9c9360dcfbc1ad79b578256815",
+   "cycles": 183
+  },
+  "tiled/flush2.csv.gz": {
+   "sha256": "ce0a5209fbf05583e9171c66f701447a42b32f77c510c31372e325119023f067",
+   "cycles": 127
+  },
+  "tiled/mesh_random.csv.gz": {
+   "sha256": "f1dc16811b8f5acdda15d4ea695272837b05b703c169fea17b14813f5b605e6b",
+   "cycles": 1504
+  },
+  "tiled/mesh_sparse.csv.gz": {
+   "sha256": "7f6bb546a44cd8ede1b0fadf9720a1548d2fe04377699d046b4837e435bd73ee",
+   "cycles": 754
+  },
+  "tiled/os_a_transposer.csv.gz": {
+   "sha256": "b9b6572b372701fccf5ef6d7be074c88bacdd2d1a9eef5ec1519c89f7647b295",
+   "cycles": 119
+  },
+  "tiled/os_b_transposed.csv.gz": {
+   "sha256": "9a000e2f2748e2d633e19559feddecc9e44896f0df028d5187289c0597edb868",
+   "cycles": 119
+  },
+  "tiled/os_back_to_back.csv.gz": {
+   "sha256": "194f69fe5a77a515723050b6b30a309553cf7d71076317d147693eebbdb98ffc",
+   "cycles": 127
+  },
+  "tiled/os_shift.csv.gz": {
+   "sha256": "338a58b565d9155a2aa3ab1cd5cb03f084b446b12a4b3df82c336655fe293b5e",
+   "cycles": 119
+  },
+  "tiled/os_single.csv.gz": {
+   "sha256": "f4ae12e7954ee85cd01cefe1b286d9cce87e20bc313849425858b4fe4aae32f6",
+   "cycles": 103
+  },
+  "tiled/os_ws_no_flush.csv.gz": {
+   "sha256": "ba2e8f86480fb7376c584e994649e9b45667aac0ed367ed954865ec379871c59",
+   "cycles": 1060
+  },
+  "tiled/partial_rows.csv.gz": {
+   "sha256": "dfc76e71d0099e5baff3d96c2aa6e818b4b9cc04e1a69d5049513cd0379bae98",
+   "cycles": 117
+  },
+  "tiled/random_1.csv.gz": {
+   "sha256": "c976a15c871b541e9e4b0c7b7ba91c8826fa9d7a77d88055ad82c20fb9fe0a73",
+   "cycles": 481
+  },
+  "tiled/random_2.csv.gz": {
+   "sha256": "082ac1b238036e12787bc317cf3c7e6158699ecb4d81efb01b340b0938aeffc1",
+   "cycles": 445
+  },
+  "tiled/random_long.csv.gz": {
+   "sha256": "0255ece4371ec2a741efc6094e3d0152e2a29b025c94fc8c123c98944494ce3e",
+   "cycles": 1874
+  },
+  "tiled/ws_a_transposed.csv.gz": {
+   "sha256": "9b816852ff70d42b1b5e780b430e475f04b065ae59f79e3ec615113a2f857fb0",
+   "cycles": 118
+  },
+  "tiled/ws_back_to_back.csv.gz": {
+   "sha256": "5829d501a52b9e087c9ee6e1c71292573172136072f768499e93b0261064fa6d",
+   "cycles": 126
+  },
+  "tiled/ws_single.csv.gz": {
+   "sha256": "8623fbbcd969081a22f7f6bab8511800fc1fdf2a8ae2482da1faca2247708442",
+   "cycles": 102
+  },
+  "tiled/ws_w_transposed.csv.gz": {
+   "sha256": "6d065778711c74c87db29dfd27d55ef92bbe6699f7883e069b78bb098dbe712a",
+   "cycles": 126
+  },
+  "ws_tree/accumulate.csv.gz": {
+   "sha256": "e3ba652fbcd921f52828eb5a3a2e41da3037c45db3fea2d0739a811f4478bbc1",
+   "cycles": 102
+  },
+  "ws_tree/bubbles.csv.gz": {
+   "sha256": "fd1a7eadf6fc7f9a18204939e43785e22ce47f1117ced275ec95e1cdc3611ab3",
+   "cycles": 177
+  },
+  "ws_tree/flush2.csv.gz": {
+   "sha256": "50ef2d482af1c581313ea3f5c800c2d0468a5ab7834e5284b0dcd0354f7dbd41",
+   "cycles": 94
+  },
+  "ws_tree/mesh_random.csv.gz": {
+   "sha256": "2bf51fcf4e262b944ccff22c11364b3f945f1ff53546a16fb69de71d219708c0",
+   "cycles": 1504
+  },
+  "ws_tree/mesh_sparse.csv.gz": {
+   "sha256": "67c47c1ca867adb63c67e718e450266eb35813c4860a4f81b936a71dfc6b744c",
+   "cycles": 754
+  },
+  "ws_tree/partial_rows.csv.gz": {
+   "sha256": "f1a729e77b3905de308d5caaa60ba5d4f3e7b6c90fa6b78b832c94a6dcad2a28",
+   "cycles": 77
+  },
+  "ws_tree/random_1.csv.gz": {
+   "sha256": "024622fe002696dbd74b7a642c3b105d437b2c88549729ea78a148bfd503ea3d",
+   "cycles": 428
+  },
+  "ws_tree/random_2.csv.gz": {
+   "sha256": "4ed127d1bcaa87df8e89f7d4eaf93f712970e8f5fe71e78059fec897986f1e51",
+   "cycles": 332
+  },
+  "ws_tree/random_long.csv.gz": {
+   "sha256": "b98148bcc9534071cc882018e45a0383f6088ba4dc1f2d15c5fc269d6c926448",
+   "cycles": 1575
+  },
+  "ws_tree/ws_a_transposed.csv.gz": {
+   "sha256": "70e99a577b7b389b6e554ad0a697554154ec3eed6425ccd984d581b708fd9a30",
+   "cycles": 85
+  },
+  "ws_tree/ws_back_to_back.csv.gz": {
+   "sha256": "075fa929a5c4d2f8c671bb941b4934dc14dea2ed5e36cc8352ad90bd10bb4cc9",
+   "cycles": 93
+  },
+  "ws_tree/ws_single.csv.gz": {
+   "sha256": "4607a8462734b299c48880256dadbb3c0b0cf43b5e7f71d259c4db4e11189e01",
+   "cycles": 69
+  },
+  "ws_tree/ws_w_transposed.csv.gz": {
+   "sha256": "895dfd828f01aa05f3563db35fa1b4d645f7f728eb019561bd26aa3925b9c77a",
+   "cycles": 93
+  }
+ }
+}
