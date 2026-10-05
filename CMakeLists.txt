@@ -81,3 +81,12 @@ foreach(cfg ${SYSTOLIQUE_CONFIGS})
   set_tests_properties(systolique_provenance_${cfg} PROPERTIES LABELS provenance
     PASS_REGULAR_EXPRESSION "PROVENANCE config=${cfg} runs=[1-9][0-9]* checks=[1-9][0-9]* failures=0")
 endforeach()
+
+# The class rules and the accounting example of perf_reports/.
+systolique_test_program(classes_test)
+systolique_test_program(example_test)
+add_test(NAME systolique_classes COMMAND classes_test)
+set_tests_properties(systolique_classes PROPERTIES LABELS unit PASS_REGULAR_EXPRESSION "CLASSES ok")
+add_test(NAME systolique_accounting_example COMMAND example_test)
+set_tests_properties(systolique_accounting_example PROPERTIES LABELS unit
+  PASS_REGULAR_EXPRESSION "EXAMPLE ok")
