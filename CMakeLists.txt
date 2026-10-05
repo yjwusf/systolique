@@ -45,7 +45,10 @@ add_library(systolique
   src/execute_controller.cpp
   src/reservation_station.cpp
   src/loop_matmul.cpp
-  src/command_path.cpp)
+  src/command_path.cpp
+  src/controller.cpp
+  src/host.cpp
+  src/engine.cpp)
 target_include_directories(systolique PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_compile_options(systolique PRIVATE ${SYSTOLIQUE_WARNINGS})
 
