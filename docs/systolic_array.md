@@ -61,8 +61,9 @@ std::string err = SystolicArray::check(acc);    // conservation; "" if it holds
 
 - `ArrayOptions{Interface::Mesh}`: the bare Mesh interface (`set_mesh_inputs`, `mesh_out()`,
   `step_mesh`), as the MeshTop RTL top; no requests and no provenance there (below).
-- `RequestNote{computes, preloads, label}` given with the cycle in which a request is offered
-  overrides the data rule of section 3 for it.
+- `RequestNote{computes, preloads, label, op, uop, load_op, load_uop}` given with the cycle in
+  which a request is offered overrides the data rule of section 3 for it and names the
+  operation and micro-op its PE-cycles and its D belong to ([micro_ops.md](micro_ops.md)).
 - State: `regs(r, c)`, `pe(r, c)` (`PeView`), `requests()` (`RequestInfo`), `d_rows()`, `rows()`,
   `mesh()`, `mesh_with_delays()`.
 
@@ -141,9 +142,15 @@ as the WS multiplicand / OS accumulator and writes c1 from in_d); when the PE is
 - **occupancy** = PE-cycles with in_valid / (DIM² x cycles of the window), **utilisation** = MAC
   PE-cycles / (DIM² x cycles of the window), for each window.
 
+- `per_uop`, `per_op`: the occupied PE-cycles by the micro-op / operation of their request
+  (`RequestInfo::uop`, `op`, from its `RequestNote`; key -1: none); `loads_by_uop`: Load PE-cycles
+  plus concurrent loads by the preload micro-op whose D they take (`load_uop`). The ExecuteController
+  fills them ([micro_ops.md](micro_ops.md) section 5).
+
 `SystolicArray::check(acc)` asserts conservation: every cycle's states sum to DIM² with at most
 DIM² MACs; every PE's states sum to the cycles; the flags are counted only on MAC PE-cycles;
-per-cycle, per-PE and per-request sums equal the totals state by state; the total is DIM² x
+per-cycle, per-PE, per-request, per-micro-op and per-operation sums equal the totals state by
+state, and the loads by micro-op sum to Load + load_concurrent; the total is DIM² x
 cycles; no occupied PE-cycle lies outside the busy window. `conservation_test` recounts every
 PE-cycle independently from the `PeView`s.
 
@@ -161,6 +168,7 @@ PE-cycle independently from the `PeView`s.
 | `loaded`, `loaded_by` | the cycle at whose end this PE latched it, and the request of that row |
 | `active` | the first cycle it was the PE's active register while valid: the propagate flip that made it the multiplicand (WS) / accumulator (OS) |
 | `last_used`, `uses`, `last_use_request` | the last cycle and the number of cycles the MacUnit used it (whatever the state), and the request of that row |
+| `op`, `uop` | the operation and micro-op of `request`'s D (`RequestInfo::load_op`, `load_uop`): in WS, the preload micro-op whose weight the PE holds ([micro_ops.md](micro_ops.md)) |
 
 In WS the op of the active register's value is the matmul whose weights the PE multiplies with
 (the stationary weight's op); in OS it is the matmul whose output tile the PE accumulates (its D

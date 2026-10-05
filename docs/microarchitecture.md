@@ -13,8 +13,10 @@ scratchpad/accumulator (`:36`). The **ExecuteController** reads operand rows fro
 scratchpad or the accumulator, feeds them row by row into **MeshWithDelays**
 (`ExecuteController.scala:186-187`), and writes the result rows back
 (`ExecuteController.scala:903-951`). MeshWithDelays wraps the **Mesh** of **Tiles** of **PEs**.
-This repository models MeshWithDelays and everything inside it; the controllers, memories, DMA
-and the RoCC interface around it are not modelled here.
+This document covers MeshWithDelays and everything inside it. The ExecuteController, the
+scratchpad and accumulator banks, LoopMatmul and the ReservationStation are modelled too and
+split operations into micro-ops: [micro_ops.md](micro_ops.md); the DMA and the RoCC interface
+are a model there.
 
 ## 2. Configuration
 
@@ -199,8 +201,9 @@ RTL counterpart; the bench lists them (`NOTE model registers the FIRRTL compiler
 
 ## 6. Not modelled
 
-- Everything outside MeshWithDelays (the ExecuteController, scratchpad, accumulator, DMA,
-  load/store controllers, reservation station, loop unrollers, the RoCC interface).
+- Here: everything outside MeshWithDelays; the frontend classes of [micro_ops.md](micro_ops.md)
+  model the ExecuteController, the banks, LoopMatmul and the ReservationStation (cycle-exact at
+  their ports), the load / store side and the DMA only as a model.
 - Floating-point PEs (hardfloat types), `shifter_banks > 1` (skew in `ShiftSRAM`).
 - Chisel assertions: the model does not check them; the RTL bench stops if one fires.
 - X / random initial values: all registers start at 0 (RTL with `RANDOMIZE_REG_INIT` differs

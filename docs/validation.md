@@ -23,6 +23,15 @@ claim of accuracy in this repository is only as good as the test named next to i
 | **live lockstep** (optional): every output port of `SystolicArray` and the Verilated RTL, every cycle; the RTL checked to depend on registers only; the internal correspondence of docs/microarchitecture.md section 5 through VPI before every edge; the RTL reproduces the stored traces; accounting conserved | `rtl_<config>` (rtl) | 286 runs (catalog + 20 random seeds per configuration), 161,811 cycles, 145,326,126 register comparisons, 0 mismatches |
 | the correspondence check sees a wrong value of each kind (exact, feed, resp, valid, pipev) | `rtl_corr_fault_<kind>` (rtl) | 5 of 5 detected |
 | the Verilog is the one the traces were made from | `rtl_verilog` (rtl) | 10 files |
+| **frontend** (docs/micro_ops.md): every stored trace of the RTL tops ExecuteTop (ExecuteController + scratchpad / accumulator banks), CmdTop (raw_cmd_q, LoopConv's queue, LoopMatmul, ReservationStation) and CtrlTop (both, wired as Gemmini's Controller) replayed through `ExecuteUnit`, `CommandPath`, `Controller`: every output port lane equal in every cycle (the completion id only while its valid bit is high: DontCare in the RTL) | `systolique_fe_trace_<top>` (trace) | 97 traces (32 / 46 / 19), 127,259 cycles, 14,603,951 port-lane comparisons, 0 mismatches |
+| each frontend trace regenerated from its stimulus on the model (same cycles, every input bit equal, every output as above); CtrlTop runs: 25 matmuls' C equal to plain C++, `Engine::check` | `systolique_fe_trace_<top>` | 97 of 97 |
+| the frontend traces are the recorded files (sha256, cycles), from the pinned Gemmini / rocket-chip / cde, generator sources as recorded | `systolique_fe_reference_provenance` (trace) | 97 traces |
+| the splitter: micro-op cycles of directed WS and OS command streams equal to values derived by hand from the Chisel; 64³ WS and OS matmuls: C, micro-op counts, every MAC PE-cycle on a compute micro-op, per-op / per-micro-op sums, MACs = M N K, every sampled WS MAC's weight traced to the preload micro-op that loaded it; recording, provenance and the VCD writers change no output; class rules; two Engines independent | `systolique_micro_ops` (unit, conservation) | 7,672 checks, 0 failures |
+| the micro-op example of perf_reports/ | `systolique_engine_example` (unit) | |
+| **frontend live lockstep** (optional): the Verilated ExecuteTop / CmdTop / CtrlTop and the model, every output port lane every cycle (as above) | `rtl_fe_execute`, `rtl_fe_cmd`, `rtl_fe_ctrl` (rtl) | 208 + 406 + 67 runs (directed + random seeds), 260,712 + 315,198 + 212,531 cycles, 78,557,176 port-lane comparisons, 0 mismatches |
+| the RTL reproduces every stored frontend trace | `rtl_fe_reference_<top>` (rtl) | 97 of 97 |
+| the comparison sees one wrong bit of a model output | `rtl_fe_fault_<top>` (rtl) | 3 of 3 detected |
+| the frontend Verilog is the one the traces were made from | `rtl_fe_verilog` (rtl) | 4 files |
 
 ## Parameters
 
@@ -46,10 +55,42 @@ the model has no free parameter.
 | `max_simultaneous_matmuls` | 5 | `MeshWithDelays.scala:48-54` | validated at 5 (every named configuration); the formula's branch above 5 unvalidated | same |
 | `tag_bits` (bench tag) | 8 | `GemminiTops.scala` `BenchTag` | validated at 8 | same |
 | initial register values | 0 | Verilator `--x-initial 0` | validated (all runs start from it) | same |
+| frontend configuration (`FrontendConfig`, `include/systolique/frontend_config.h`): sp_banks 4, sp 256 KiB single-ported, acc_banks 2, acc 64 KiB two-ported, spad_read_delay 4, acc_latency 2, ReservationStation 8 / 16 / 4 entries, ex_queue_length 8, dma_maxbytes 64, has_first_layer_optimizations, has_nonlinear_activations | Gemmini's defaultConfig | `Configs.scala:38-65`, `GemminiConfigs.scala:42, 48, 90` | validated at these values only (`validate()` refuses others) | `systolique_fe_trace_*`, `rtl_fe_*` |
+| `core_max_addr_bits` | 40 | Rocket with Sv39 (`rtl/ex/src/CmdTop.scala`) | validated at 40 | same |
+| DMA model `DmaParams::latency` | 40 cycles | none (a round figure) | unvalidated, not fitted | — |
+| DMA model `DmaParams::bytes_per_cycle` | 16 | dma_buswidth 128 bits (`Configs.scala:66`); one beat per cycle assumed | unvalidated | — |
+| DMA model `DmaParams::max_cmds` | 2 per channel | none | unvalidated | — |
 
 ## Log
 
 Newest first. Each entry: date, what was run, toolchain, result.
+
+### 2026-10-06: micro-op splitting (frontend classes, Engine)
+
+- New: `ExecuteController`, `ScratchpadBank` / `Scratchpad`, `AccumulatorBank` / `Accumulator`,
+  `ReservationStation`, `LoopMatmul`, `CommandPath`, `ExecuteUnit`, `Controller` (ports of
+  Gemmini v0.7.2's Chisel), the modelled `Host` (core, DMA), `Engine`, the micro-op table and
+  its attribution in `SystolicArray` (docs/micro_ops.md).
+- RTL: `rtl/ex/elaborate_ex.sh` elaborated ExecuteTop, CmdTop and CtrlTop from the unmodified
+  Gemmini v0.7.2 sources with rocket-chip 67ceb1d, cde 384c06b, hardfloat 9deaf1d, Chisel 3.6.0
+  (sbt 1.10.11, OpenJDK 17) into `~/opt/gemmini-verilog-709bc56/frontend`; digests in
+  `tests/reference/gemmini_fe/provenance.json` (ExecuteTop and CmdTop are, without source
+  locators, the same Verilog as an earlier elaboration of the same tops). Verilator 5.038.
+- Recorded `tests/reference/gemmini_fe/` (`tools/rtl_provenance.py fe-record`): every directed
+  test and random seeds 1-24 (ExecuteTop), 1-40 (CmdTop), 1-12 (CtrlTop): 97 traces, 127,259
+  cycles, rows from cycle 0 (the four reset cycles are not stored).
+- Offline: 97 traces replayed, 14,603,951 port-lane comparisons, 0 mismatches; 97 of 97
+  regenerated; 25 matmuls' C equal to plain C++; `systolique_micro_ops` 7,672 checks.
+- Live: `rtl_fe_execute` 208 runs / 260,712 cycles, `rtl_fe_cmd` 406 / 315,198, `rtl_fe_ctrl`
+  67 / 212,531; 78,557,176 port-lane comparisons, 0 mismatches; the RTL reproduces all 97
+  stored traces; the three fault-injection tests detect the flipped bit. Comparing the
+  completion id also while it is not valid gives mismatches (it is DontCare in the RTL,
+  `ExecuteController.scala:172`); every other port compared unqualified matches (checked port
+  by port on the directed tests and 20 seeds of each top).
+- The existing checks are unchanged: 86 array traces replayed and regenerated, conservation,
+  provenance, live lockstep of the array (`ctest -L rtl`: 21 tests pass); the viewer pages were
+  regenerated (the template gained the micro-op views; the dumped requests their op / micro-op).
+- Toolchain as in the first entry; `ctest -LE rtl`: 26 tests, about 17 s serially.
 
 ### 2026-10-05: first standalone run
 

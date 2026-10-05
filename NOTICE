@@ -15,11 +15,23 @@ Derived from Gemmini (C++ models of its Chisel hardware, with comments citing it
   bench/stimulus.cpp, bench/reference.cpp (request sequences as Gemmini's ExecuteController
   issues them)
   docs/microarchitecture.md (description of Gemmini's microarchitecture)
+  include/systolique/fe_util.h, frontend_config.h, isa.h, scratchpad.h, execute_controller.h,
+  reservation_station.h, loop_matmul.h, command_path.h, controller.h, engine.h
+  src/frontend_config.cpp, isa.cpp, scratchpad.cpp, execute_controller.cpp,
+  reservation_station.cpp, loop_matmul.cpp, command_path.cpp, controller.cpp
+  src/engine.cpp (matmul command streams as gemmini.h of gemmini-rocc-tests 1a1a1c6 issues them)
+  include/systolique/host.h, src/host.cpp (decode Gemmini's mvin / mvout / config encodings)
+  bench/fe_stimulus.cpp (command sequences as gemmini.h and LoopMatmul issue them)
+  docs/micro_ops.md (description of Gemmini's controllers)
 
 Generated from Gemmini or built on it:
   rtl/src/GemminiTops.scala (wrappers instantiating Gemmini's Mesh and MeshWithDelays),
   rtl/build.sbt, rtl/elaborate.sh (compile Gemmini's unmodified sources)
-  tests/reference/gemmini_rtl/ (input/output traces of RTL elaborated from Gemmini's sources)
+  rtl/ex/src/ExecuteTop.scala, CmdTop.scala, CtrlTop.scala (wrappers instantiating Gemmini's
+  ExecuteController, scratchpad and accumulator banks, LoopConv, LoopMatmul, ReservationStation),
+  rtl/ex/src/MidasTargetutils.scala, rtl/ex/build.sbt, rtl/ex/elaborate_ex.sh
+  tests/reference/gemmini_rtl/, tests/reference/gemmini_fe/ (input/output traces of RTL
+  elaborated from Gemmini's sources)
 
 Gemmini's own sources and the generated Verilog are not included.
 

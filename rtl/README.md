@@ -60,3 +60,34 @@ python3 tools/rtl_provenance.py record --build build    # runs rtl_<config> --wr
 It rewrites `tests/reference/gemmini_rtl/<config>/*.csv.gz` and `provenance.json` (Verilog
 provenance, the Verilator that ran it, sha256 and cycles of every trace). Commit them together
 with the change that needed them and a validation log entry (docs/validation.md).
+
+## The frontend tops (`rtl/ex/`)
+
+The ExecuteController with its scratchpad and accumulator banks (`ExecuteTop`), the command
+path (`CmdTop`: raw_cmd_q, LoopConv, LoopMatmul, the unrolled queue, the ReservationStation)
+and both wired as Gemmini's Controller wires them (`CtrlTop`), for the frontend classes of
+[docs/micro_ops.md](../docs/micro_ops.md). Every Gemmini source but the Chipyard configurations
+is compiled, unmodified, with the rocket-chip Gemmini v0.7.2 was released against:
+
+| what | version | where |
+|---|---|---|
+| rocket-chip | `67ceb1ddbfd1c6f50d2b4fdadf68f304f5e62287` (pinned by Chipyard `ef3409f`, Gemmini v0.7.2's `CHIPYARD.hash`) | `ROCKETCHIP_DIR` (default `~/opt/src/rocket-chip-67ceb1d`) |
+| cde | `384c06b8d45c8184ca2f3fba2f8e78f79d2c1b51` (rocket-chip's submodule) | `CDE_DIR` |
+| hardfloat, Chisel, Scala, sbt, JDK, Verilator | as above | |
+
+`src/MidasTargetutils.scala` stands in for FireSim's `midas.targetutils` (Gemmini uses it only
+with `use_firesim_simulation_counters`, false in its defaultConfig); the three tops are wiring
+only (ports packed as `bench/fe_ports.h` reads them; the DMA replaced by row-write test ports).
+
+```sh
+rtl/ex/elaborate_ex.sh      # -> ~/opt/gemmini-verilog-709bc56/frontend/{ExecuteTop,CmdTop,CtrlTop}.v,
+                            #    plusarg_reader.v, provenance.json (not in git)
+cmake -S . -B build         # builds rtl_fe (rtl/fe_bench.cpp) when Verilator and the Verilog exist
+ctest --test-dir build -L rtl
+python3 tools/rtl_provenance.py fe-record --build build   # re-record tests/reference/gemmini_fe/
+```
+
+Tests: `rtl_fe_<top>` (every directed test and random seeds of `bench/fe_stimulus.cpp`, every
+output port lane every cycle), `rtl_fe_reference_<top>` (the RTL reproduces every stored trace),
+`rtl_fe_fault_<top>` (a flipped model bit is reported), `rtl_fe_verilog` (the Verilog digests).
+The frontend traces start at cycle 0: the four reset cycles before it are not stored.
