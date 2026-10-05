@@ -112,6 +112,17 @@ add_test(NAME systolique_vcd COMMAND vcd_test --ref-dir ${SYSTOLIQUE_REF_DIR}
          --out ${CMAKE_CURRENT_BINARY_DIR}/vcd_out)
 set_tests_properties(systolique_vcd PROPERTIES LABELS vcd PASS_REGULAR_EXPRESSION "VCD ok")
 
+# ---------------------------------------------------------------- frontend: splitter and micro-ops
+set(SYSTOLIQUE_FE_REF_DIR ${PROJECT_SOURCE_DIR}/tests/reference/gemmini_fe)
+# The stored frontend RTL traces: replay (every output port, every cycle) and regeneration.
+systolique_test_program(fe_trace_test)
+foreach(top ExecuteTop CmdTop CtrlTop)
+  add_test(NAME systolique_fe_trace_${top} COMMAND fe_trace_test --ref-dir ${SYSTOLIQUE_FE_REF_DIR} --top ${top})
+  set_tests_properties(systolique_fe_trace_${top} PROPERTIES LABELS trace
+    PASS_REGULAR_EXPRESSION "FE_TRACES top=${top} traces=[1-9][0-9]* .* mismatches=0 regenerated=[0-9]+/[0-9]+ engine_failures=0"
+    FAIL_REGULAR_EXPRESSION "FAIL")
+endforeach()
+
 # ---------------------------------------------------------------- tools: dump + HTML viewer
 add_executable(systolique_dump tools/array_dump.cpp)
 target_link_libraries(systolique_dump PRIVATE systolique_bench)
@@ -130,6 +141,10 @@ if(Python3_FOUND)
   add_test(NAME systolique_reference_provenance
            COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/rtl_provenance.py check-traces)
   set_tests_properties(systolique_reference_provenance PROPERTIES LABELS trace
+    PASS_REGULAR_EXPRESSION "TRACES ok")
+  add_test(NAME systolique_fe_reference_provenance
+           COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/rtl_provenance.py fe-check-traces)
+  set_tests_properties(systolique_fe_reference_provenance PROPERTIES LABELS trace
     PASS_REGULAR_EXPRESSION "TRACES ok")
 else()
   message(WARNING "systolique: no Python 3; skipping the viewer and reference provenance tests")
