@@ -89,5 +89,5 @@ microarchitecture and the register-by-register correspondence with the RTL:
 
 The model is derived from Gemmini, Copyright (c) 2018-2019, The Regents of the University of
 California, under the BSD-3-Clause license: its text is in [LICENSE.gemmini](LICENSE.gemmini),
-and [NOTICE](NOTICE) lists the files derived from or generated with Gemmini. **The license of the
-rest of this repository has not been chosen yet** by its owner.
+and [NOTICE](NOTICE) lists the files derived from or generated with Gemmini; those files keep
+Gemmini's terms. Everything else is licensed under the [Apache License, Version 2.0](LICENSE).

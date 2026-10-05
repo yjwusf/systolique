@@ -23,4 +23,6 @@ Generated from Gemmini or built on it:
 
 Gemmini's own sources and the generated Verilog are not included.
 
-The license of the rest of this repository has not been chosen yet (see README.md).
+Everything else in this repository: Copyright 2026 Wu Yu Jian, licensed under the Apache
+License, Version 2.0 (LICENSE). The files derived from Gemmini keep Gemmini's BSD-3-Clause
+terms and copyright notice above.

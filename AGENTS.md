@@ -110,5 +110,5 @@ them unless the owner changes them here.
 - Nothing private or unrelated: no other projects' code, credentials, hostnames or local paths
   beyond the documented tool locations.
 - Licensing: the Gemmini-derived files are BSD-3-Clause (LICENSE.gemmini, NOTICE); list every new
-  derived file in NOTICE. The license of the rest has not been chosen by the owner; do not add
-  one.
+  derived file in NOTICE. Everything else is Apache-2.0 (LICENSE); new files are Apache-2.0
+  unless derived from Gemmini.
